@@ -2,11 +2,22 @@ from typing import Literal, Tuple, Dict, Optional
 import os
 import time
 import json
+import smtplib
 import requests
 import PyPDF2
 from datetime import datetime, timedelta
 import pytz
 from typing import Literal, Tuple
+from datetime import datetime, timedelta
+from email.mime.text import MIMEText
+import requests
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from datetime import datetime, timedelta
+import logging
+import streamlit as st
+
 
 import streamlit as st
 from phi.agent import Agent
@@ -98,34 +109,6 @@ def init_session_state() -> None:
         if key not in st.session_state:
             st.session_state[key] = value
 
-def create_scheduler_agent() -> Agent:
-    zoom_tools = CustomZoomTool(
-        account_id=st.session_state.zoom_account_id,
-        client_id=st.session_state.zoom_client_id,
-        client_secret=st.session_state.zoom_client_secret
-    )
-
-    return Agent(
-        name="Interview Scheduler",
-        model=OpenAIChat(
-            id="gpt-4o",
-            api_key='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'
-        ),
-        tools=[zoom_tools],
-        description="You are an interview scheduling coordinator.",
-        instructions=[
-            "You are an expert at scheduling technical interviews using Zoom.",
-            "Schedule interviews during business hours (9 AM - 5 PM EST)",
-            "Create meetings with proper titles and descriptions",
-            "Ensure all meeting details are included in responses",
-            "Use ISO 8601 format for dates",
-            "Handle scheduling errors gracefully"
-        ],
-        markdown=True,
-        show_tool_calls=True
-    )
-
-
 def extract_text_from_pdf(pdf_file) -> str:
     try:
         pdf_reader = PyPDF2.PdfReader(pdf_file)
@@ -160,70 +143,114 @@ def analyze_resume(
         return False, f"Error analyzing resume: {str(e)}"
 
 
-def send_selection_email(email_agent: Agent, to_email: str, role: str) -> None:
-    email_agent.run(
-        f"""
-        Send an email to {to_email} regarding their selection for the {role} position.
-        The email should:
-        1. Congratulate them on being selected
-        2. Explain the next steps in the process
-        3. Mention that they will receive interview details shortly
-        4. The name of the company is 'AI Recruiting Team'
-        """
-    )
-
-
-def send_rejection_email() -> None:
-    pass
+def send_selection_email( sender_email, sender_password, receiver_email) -> None:
+        """Send an email with the given subject and body."""
+        msg = MIMEText('this is the body of acceptance mail')
+        msg["Subject"] = 'you are accepted for role'
+        msg["From"] = sender_email
+        msg["To"] = receiver_email
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, receiver_email, msg.as_string())
     
 
 
-def schedule_interview(scheduler: Agent, candidate_email: str, email_agent: Agent, role: str) -> None:
-    """
-    Schedule interviews during business hours (9 AM - 5 PM IST).
-    """
+def send_rejection_email(sender_email, sender_password, receiver_email) -> None:
+      """Send an email with the given subject and body."""
+      msg = MIMEText('this is the body of rejection mail')
+      msg["Subject"] = 'you got rejected'
+      msg["From"] = sender_email
+      msg["To"] = receiver_email
+      with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        server.starttls()
+        server.login(sender_email, sender_password)
+        server.sendmail(sender_email, receiver_email, msg.as_string())
+    
+
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def schedule_interview(zoom_acc_id, zoom_client_id, zoom_secret, sender_email, sender_password, receiver_email, role: str) -> None:
     try:
-        # Get current time in IST
-        ist_tz = pytz.timezone('Asia/Kolkata')
-        current_time_ist = datetime.now(ist_tz)
-
-        tomorrow_ist = current_time_ist + timedelta(days=1)
-        interview_time = tomorrow_ist.replace(hour=11, minute=0, second=0, microsecond=0)
-        formatted_time = interview_time.strftime('%Y-%m-%dT%H:%M:%S')
-
-        meeting_response = scheduler.run(
-            f"""Schedule a 60-minute technical interview with these specifications:
-            - Title: '{role} Technical Interview'
-            - Date: {formatted_time}
-            - Timezone: IST (India Standard Time)
-            - Attendee: {candidate_email}
-            
-            Important Notes:
-            - The meeting must be between 9 AM - 5 PM IST
-            - Use IST (UTC+5:30) timezone for all communications
-            - Include timezone information in the meeting details
-            """
-        )
-
-        email_agent.run(
-            f"""Send an interview confirmation email with these details:
-            - Role: {role} position
-            - Meeting Details: {meeting_response}
-            
-            Important:
-            - Clearly specify that the time is in IST (India Standard Time)
-            - Ask the candidate to join 5 minutes early
-            - Include timezone conversion link if possible
-            - Ask him to be confident and not so nervous and prepare well for the interview
-            """
-        )
+        # Step 1: Get Zoom OAuth token
+        zoom_token_url = "https://zoom.us/oauth/token"
+        zoom_payload = {
+            'grant_type': 'account_credentials',
+            'account_id': zoom_acc_id
+        }
+        auth = (zoom_client_id, zoom_secret)
         
+        token_response = requests.post(zoom_token_url, data=zoom_payload, auth=auth)
+        token_response.raise_for_status()
+        access_token = token_response.json().get('access_token')
+
+        if not access_token:
+            raise ValueError("Failed to fetch Zoom access token.")
+
+        # Step 2: Schedule a Zoom meeting
+        zoom_meeting_url = "https://api.zoom.us/v2/users/me/meetings"
+        meeting_time = datetime.utcnow() + timedelta(days=1)  # 24 hours from now
+        meeting_time_iso = meeting_time.strftime("%Y-%m-%dT%H:%M:%SZ")  # ISO 8601 format
+        
+        meeting_details = {
+            "topic": f"Interview for {role}",
+            "type": 2,  # Scheduled meeting
+            "start_time": meeting_time_iso,
+            "duration": 60,  # Meeting duration in minutes
+            "timezone": "UTC",
+            "settings": {
+                "join_before_host": True,
+                "waiting_room": False
+            }
+        }
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
+
+        meeting_response = requests.post(zoom_meeting_url, json=meeting_details, headers=headers)
+        meeting_response.raise_for_status()
+        meeting_data = meeting_response.json()
+        meeting_link = meeting_data.get('join_url')
+
+        if not meeting_link:
+            raise ValueError("Failed to schedule Zoom meeting.")
+
+        # Step 3: Send email with meeting details
+        subject = "Interview Scheduled"
+        body = f"""\
+        Dear Candidate,
+
+        You have an interview scheduled for the role of {role}.
+
+        Meeting Details:
+        Link: {meeting_link}
+        Date: {meeting_time.strftime('%Y-%m-%d')}
+        Time: {meeting_time.strftime('%H:%M:%S')} UTC
+
+        Best regards,
+        Hiring Team
+        """
+
+        message = MIMEMultipart()
+        message['From'] = sender_email
+        message['To'] = receiver_email
+        message['Subject'] = subject
+        message.attach(MIMEText(body, 'plain'))
+
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()
+            server.login(sender_email, sender_password)
+            server.send_message(message)
+
         st.success("Interview scheduled successfully! Check your email for details.")
-        
+        logger.info("Interview scheduled and email sent successfully.")
+
     except Exception as e:
         logger.error(f"Error scheduling interview: {str(e)}")
         st.error("Unable to schedule interview. Please try again.")
-
 
 def main() -> None:
     st.title("AI Recruitment System")
@@ -346,9 +373,7 @@ def main() -> None:
                         # Send rejection email
                         with st.spinner("Sending feedback email..."):
                             try:
-                                send_rejection_email(
-                                    #write code to send mail as rejected
-                                )
+                                send_rejection_email(st.session_state.get('email_sender'),st.session_state.get('email_passkey'), st.session_state.get('candidate_email'))
                                 st.info("We've sent you an email with detailed feedback.")
                             except Exception as e:
                                 logger.error(f"Error sending rejection email: {e}")
@@ -362,22 +387,11 @@ def main() -> None:
             print("DEBUG: Proceed button clicked")  # Debug
             with st.spinner("🔄 Processing your application..."):
                 try:
-                    print("DEBUG: Creating email agent")  # Debug
-                    email_agent = create_email_agent()
-                    print(f"DEBUG: Email agent created: {email_agent}")  # Debug
-                    
-                    print("DEBUG: Creating scheduler agent")  # Debug
-                    scheduler_agent = create_scheduler_agent()
-                    print(f"DEBUG: Scheduler agent created: {scheduler_agent}")  # Debug
-
                     # 3. Send selection email
                     with st.status("📧 Sending confirmation email...", expanded=True) as status:
                         print(f"DEBUG: Attempting to send email to {st.session_state.candidate_email}")  # Debug
                         send_selection_email(
-                            email_agent,
-                            st.session_state.candidate_email,
-                            role
-                        )
+                           st.session_state.get('email_sender'),st.session_state.get('email_passkey'), st.session_state.get('candidate_email'))
                         print("DEBUG: Email sent successfully")  # Debug
                         status.update(label="✅ Confirmation email sent!")
 
@@ -385,10 +399,14 @@ def main() -> None:
                     with st.status("📅 Scheduling interview...", expanded=True) as status:
                         print("DEBUG: Attempting to schedule interview")  # Debug
                         schedule_interview(
-                            scheduler_agent,
-                            st.session_state.candidate_email,
-                            email_agent,
-                            role
+                            st.session_state.get('zoom_account_id'),
+                            st.session_state.get('zoom_client_id'),
+                            st.session_state.get('zoom_client_secret'),
+                            st.session_state.get('email_sender'),
+                            st.session_state.get('email_passkey'),
+                            st.session_state.get('candidate_email'),
+                            'Software Enginner'
+
                         )
                         print("DEBUG: Interview scheduled successfully")  # Debug
                         status.update(label="✅ Interview scheduled!")
