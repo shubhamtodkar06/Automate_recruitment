@@ -336,44 +336,42 @@ def main() -> None:
         if 'custom_roles' not in st.session_state:
             st.session_state['custom_roles'] = {}
         
-            st.sidebar.subheader("Modify or Add Role Criteria")
-    
-    # Add a new role or modify an existing one
-    role = st.sidebar.selectbox("Select a role to modify or add", 
-                                 list(st.session_state['custom_roles'].keys()) + ["Add New Role"])
+        st.sidebar.subheader("Modify or Add Role Criteria")
 
-    if role == "Add New Role":
-        new_role = st.sidebar.text_input("Enter a new role name")
-        new_criteria = st.sidebar.text_area(f"Enter criteria for {new_role}", height=300)
-        if st.sidebar.button("Save New Role"):
-            if new_role and new_criteria:
-                st.session_state['custom_roles'][new_role] = new_criteria
-                st.sidebar.success(f"New role {new_role} added successfully!")
-            else:
-                st.sidebar.error("Please provide a valid role name and criteria.")
-    else:
-        # Modify an existing role's criteria
-        criteria = st.session_state['custom_roles'].get(role, ROLE_REQUIREMENTS.get(role, ""))
+        final_roles = {**ROLE_REQUIREMENTS, **st.session_state['custom_roles']}
+        # Add a new role or modify an existing one
+        role_choice = st.selectbox(
+            "Select a role to modify or add:",
+            list(final_roles.keys()) + ["Add New Role"]
+        )
         
-        # Text area for modifying criteria
-        new_criteria = st.sidebar.text_area(f"Modify criteria for {role}", value=criteria, height=300)
-
-        if st.sidebar.button("Save Changes"):
-            if new_criteria:
-                st.session_state['custom_roles'][role] = new_criteria
-                st.sidebar.success(f"Updated criteria for {role} successfully!")
-            else:
-                st.sidebar.error("Please provide the updated criteria.")
-
-    final_roles = {}
-    
-    for role in ROLE_REQUIREMENTS.keys():  # Default roles
-        # Check if custom role exists in session state, otherwise use default criteria
-        if role in st.session_state['custom_roles']:
-            final_roles[role] = st.session_state['custom_roles'][role]
+        if role_choice == "Add New Role":
+            new_role = st.text_input("Enter the name of the new role:")
+            if new_role:
+                new_criteria = st.text_area("Enter the criteria for the new role:")
+                if st.button("Add Role"):
+                    if new_role in final_roles:
+                        st.error(f"Role '{new_role}' already exists. Please choose a different name.")
+                    elif new_role.strip() == "":
+                        st.error("Role name cannot be empty.")
+                    elif not new_criteria.strip():
+                        st.error("Please provide criteria for the new role.")
+                    else:
+                        # Add the new role to session state
+                        st.session_state['custom_roles'][new_role] = new_criteria
+                        st.success(f"New role '{new_role}' added successfully.")
         else:
-            final_roles[role] = ROLE_REQUIREMENTS[role]
-#############################################################################################################################################
+            # If an existing role is selected, allow editing its criteria
+            new_criteria = st.text_area(f"Modify the criteria for {role_choice}:", value=final_roles[role_choice])
+            if st.button("Save Changes"):
+                if new_criteria.strip() == "":
+                    st.error("Criteria cannot be empty.")
+                else:
+                    # Update the selected role's criteria
+                    st.session_state['custom_roles'][role_choice] = new_criteria
+                    st.success(f"Criteria for '{role_choice}' updated successfully.")
+
+#########################################################################################################################################
     missing_configs = [k for k, v in required_configs.items() if not v]
     if missing_configs:
         st.warning(f"Please configure the following in the sidebar: {', '.join(missing_configs)}")
