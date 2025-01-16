@@ -1,12 +1,9 @@
 from typing import Literal, Tuple, Dict, Optional
-import os
 import time
-import json
 import smtplib
 import requests
 import PyPDF2
 from datetime import datetime, timedelta
-import pytz
 from typing import Literal, Tuple
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
@@ -20,9 +17,6 @@ import streamlit as st
 
 
 import streamlit as st
-from phi.agent import Agent
-from phi.model.openai import OpenAIChat
-from phi.tools.email import EmailTools
 from phi.tools.zoom import ZoomTool
 from phi.utils.log import logger
 from streamlit_pdf_viewer import pdf_viewer
@@ -123,7 +117,7 @@ def extract_text_from_pdf(pdf_file) -> str:
 
 def analyze_resume(
     resume_text: str,
-    role: Literal["ai_ml_engineer", "frontend_engineer", "backend_engineer"]
+    role
 ) -> Tuple[bool, str]:
     try:
         # Manual response
@@ -143,36 +137,79 @@ def analyze_resume(
         return False, f"Error analyzing resume: {str(e)}"
 
 
-def send_selection_email( sender_email, sender_password, receiver_email) -> None:
-        """Send an email with the given subject and body."""
-        msg = MIMEText('this is the body of acceptance mail')
-        msg["Subject"] = 'you are accepted for role'
-        msg["From"] = sender_email
-        msg["To"] = receiver_email
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
-            server.starttls()
-            server.login(sender_email, sender_password)
-            server.sendmail(sender_email, receiver_email, msg.as_string())
+def send_selection_email(sender_email, sender_password, receiver_email, role, company) -> None:
+    """Send an email with the given subject and body."""
     
+    # Constructing the subject and body of the email
+    subject = f"Congratulations! You have been selected for the {role} role"
+    
+    body = f"""
+    Dear Candidate,
+    
+    Congratulations! We are pleased to inform you that you have been selected for the role of {role} at {company}.
+    
+    We believe you will be a great addition to the team, and we look forward to seeing the skills and expertise you will bring to this position.
+    
+    Please prepare yourself by reviewing relevant skills for the {role} role. You will be contacted shortly with further instructions regarding your start date and other preparations.
+    
+    Additionally, we will schedule a Zoom meeting soon to discuss the next steps and answer any questions you may have.
+    
+    Best regards,
+    {company}
+    """
+
+    # Creating MIMEText object for email
+    msg = MIMEText(body, 'plain', 'utf-8')
+    msg["Subject"] = subject
+    msg["From"] = sender_email
+    msg["To"] = receiver_email
+
+    # Sending the email through Gmail's SMTP server
+    with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        server.starttls()  # Start TLS encryption
+        server.login(sender_email, sender_password)  # Login with the sender's credentials
+        server.sendmail(sender_email, receiver_email, msg.as_string())  # Send the email
 
 
-def send_rejection_email(sender_email, sender_password, receiver_email) -> None:
-      """Send an email with the given subject and body."""
-      msg = MIMEText('this is the body of rejection mail')
-      msg["Subject"] = 'you got rejected'
-      msg["From"] = sender_email
-      msg["To"] = receiver_email
-      with smtplib.SMTP("smtp.gmail.com", 587) as server:
-        server.starttls()
-        server.login(sender_email, sender_password)
-        server.sendmail(sender_email, receiver_email, msg.as_string())
+def send_rejection_email(sender_email, sender_password, receiver_email, role, company) -> None:
+    """Send an email with the given subject and body."""
     
+    # Constructing the subject and body of the rejection email
+    subject = f"Regarding your application for the {role} role"
+    
+    body = f"""
+    Dear Candidate,
+    
+    Thank you for your interest in the {role} role at {company}. Unfortunately, we regret to inform you that we will not be proceeding with your application at this time.
+    
+    While we were impressed with your qualifications, we have decided to move forward with other candidates who more closely match the requirements for this role.
+    
+    We encourage you to continue preparing and working hard to improve your skills. Please don't be discouraged—your next opportunity may be just around the corner. We welcome you to apply again for future positions with us.
+
+    We wish you all the best in your career journey.
+    
+    Best regards,
+    {company}
+    """
+
+    # Creating MIMEText object for email
+    msg = MIMEText(body, 'plain', 'utf-8')
+    msg["Subject"] = subject
+    msg["From"] = sender_email
+    msg["To"] = receiver_email
+
+    # Sending the email through Gmail's SMTP server
+    with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        server.starttls()  # Start TLS encryption
+        server.login(sender_email, sender_password)  # Login with the sender's credentials
+        server.sendmail(sender_email, receiver_email, msg.as_string())  # Send the email
+ 
 
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def schedule_interview(zoom_acc_id, zoom_client_id, zoom_secret, sender_email, sender_password, receiver_email, role: str) -> None:
+def schedule_interview(zoom_acc_id, zoom_client_id, zoom_secret, sender_email, sender_password, receiver_email, role: str, company) -> None:
     try:
         # Step 1: Get Zoom OAuth token
         zoom_token_url = "https://zoom.us/oauth/token"
@@ -219,19 +256,28 @@ def schedule_interview(zoom_acc_id, zoom_client_id, zoom_secret, sender_email, s
             raise ValueError("Failed to schedule Zoom meeting.")
 
         # Step 3: Send email with meeting details
-        subject = "Interview Scheduled"
-        body = f"""\
+        subject = f"Interview Scheduled for {role} at {company}"
+        body = f"""
         Dear Candidate,
 
-        You have an interview scheduled for the role of {role}.
+        We are pleased to inform you that your interview for the {role} role at {company} has been scheduled.
 
         Meeting Details:
-        Link: {meeting_link}
-        Date: {meeting_time.strftime('%Y-%m-%d')}
-        Time: {meeting_time.strftime('%H:%M:%S')} UTC
+        - Link: {meeting_link}
+        - Date: {meeting_time.strftime('%Y-%m-%d')}
+        - Time: {meeting_time.strftime('%H:%M:%S')} UTC
+
+        Instructions:
+        - Please ensure that you join the interview on time.
+        - Test your camera and microphone in advance to ensure they are working correctly.
+        - Use a quiet environment to avoid distractions during the interview.
+        - Dress appropriately as you would for an in-person interview.
+        - Ensure your internet connection is stable for a smooth interview experience.
+
+        We look forward to meeting with you and discussing your qualifications for the {role} role.
 
         Best regards,
-        Hiring Team
+        {company} Hiring Team
         """
 
         message = MIMEMultipart()
@@ -285,7 +331,49 @@ def main() -> None:
                           'Zoom Client ID': st.session_state.zoom_client_id, 'Zoom Client Secret': st.session_state.zoom_client_secret,
                           'Email Sender': st.session_state.email_sender, 'Email Password': st.session_state.email_passkey,
                           'Company Name': st.session_state.company_name}
+##########################################################################################################################################
+        
+        if 'custom_roles' not in st.session_state:
+            st.session_state['custom_roles'] = {}
+        
+            st.sidebar.subheader("Modify or Add Role Criteria")
+    
+    # Add a new role or modify an existing one
+    role = st.sidebar.selectbox("Select a role to modify or add", 
+                                 list(st.session_state['custom_roles'].keys()) + ["Add New Role"])
 
+    if role == "Add New Role":
+        new_role = st.sidebar.text_input("Enter a new role name")
+        new_criteria = st.sidebar.text_area(f"Enter criteria for {new_role}", height=300)
+        if st.sidebar.button("Save New Role"):
+            if new_role and new_criteria:
+                st.session_state['custom_roles'][new_role] = new_criteria
+                st.sidebar.success(f"New role {new_role} added successfully!")
+            else:
+                st.sidebar.error("Please provide a valid role name and criteria.")
+    else:
+        # Modify an existing role's criteria
+        criteria = st.session_state['custom_roles'].get(role, ROLE_REQUIREMENTS.get(role, ""))
+        
+        # Text area for modifying criteria
+        new_criteria = st.sidebar.text_area(f"Modify criteria for {role}", value=criteria, height=300)
+
+        if st.sidebar.button("Save Changes"):
+            if new_criteria:
+                st.session_state['custom_roles'][role] = new_criteria
+                st.sidebar.success(f"Updated criteria for {role} successfully!")
+            else:
+                st.sidebar.error("Please provide the updated criteria.")
+
+    final_roles = {}
+    
+    for role in ROLE_REQUIREMENTS.keys():  # Default roles
+        # Check if custom role exists in session state, otherwise use default criteria
+        if role in st.session_state['custom_roles']:
+            final_roles[role] = st.session_state['custom_roles'][role]
+        else:
+            final_roles[role] = ROLE_REQUIREMENTS[role]
+#############################################################################################################################################
     missing_configs = [k for k, v in required_configs.items() if not v]
     if missing_configs:
         st.warning(f"Please configure the following in the sidebar: {', '.join(missing_configs)}")
@@ -295,8 +383,8 @@ def main() -> None:
         st.warning("Please enter your OpenAI API key in the sidebar to continue.")
         return
 
-    role = st.selectbox("Select the role you're applying for:", ["ai_ml_engineer", "frontend_engineer", "backend_engineer"])
-    with st.expander("View Required Skills", expanded=True): st.markdown(ROLE_REQUIREMENTS[role])
+    role = st.selectbox("Select the role you're applying for:", list(final_roles.keys()))
+    with st.expander("View Required Skills", expanded=True): st.markdown(final_roles[role])
 
     # Add a "New Application" button before the resume upload
     if st.button("📝 New Application"):
@@ -373,7 +461,11 @@ def main() -> None:
                         # Send rejection email
                         with st.spinner("Sending feedback email..."):
                             try:
-                                send_rejection_email(st.session_state.get('email_sender'),st.session_state.get('email_passkey'), st.session_state.get('candidate_email'))
+                                send_rejection_email(st.session_state.get('email_sender'),
+                                                     st.session_state.get('email_passkey'), 
+                                                     st.session_state.get('candidate_email'),
+                                                     role, 
+                                                     st.session_state.get('company_name'))
                                 st.info("We've sent you an email with detailed feedback.")
                             except Exception as e:
                                 logger.error(f"Error sending rejection email: {e}")
@@ -391,7 +483,11 @@ def main() -> None:
                     with st.status("📧 Sending confirmation email...", expanded=True) as status:
                         print(f"DEBUG: Attempting to send email to {st.session_state.candidate_email}")  # Debug
                         send_selection_email(
-                           st.session_state.get('email_sender'),st.session_state.get('email_passkey'), st.session_state.get('candidate_email'))
+                           st.session_state.get('email_sender'),
+                           st.session_state.get('email_passkey'),
+                           st.session_state.get('candidate_email'), 
+                           role, 
+                           st.session_state.get('company_name'))
                         print("DEBUG: Email sent successfully")  # Debug
                         status.update(label="✅ Confirmation email sent!")
 
@@ -405,7 +501,8 @@ def main() -> None:
                             st.session_state.get('email_sender'),
                             st.session_state.get('email_passkey'),
                             st.session_state.get('candidate_email'),
-                            'Software Enginner'
+                            role,
+                            st.session_state.get('company_name')
 
                         )
                         print("DEBUG: Interview scheduled successfully")  # Debug
