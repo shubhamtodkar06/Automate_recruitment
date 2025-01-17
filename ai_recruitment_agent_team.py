@@ -16,7 +16,8 @@ import logging
 import streamlit as st
 import json
 import os
-
+import pytz
+import logging
 
 import streamlit as st
 from phi.tools.zoom import ZoomTool
@@ -322,8 +323,23 @@ def send_rejection_email(sender_email, sender_password, receiver_email, role, co
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def schedule_interview(zoom_acc_id, zoom_client_id, zoom_secret, sender_email, sender_password, receiver_email, role: str, company) -> None:
+def schedule_interview(
+    zoom_acc_id, zoom_client_id, zoom_secret, sender_email, 
+    sender_password, receiver_email, role: str, company: str, local_timezone: str
+) -> None:
     try:
+        # Ensure the date and time for scheduling are set
+        if "scheduled_datetime" not in st.session_state:
+            st.error("Please schedule a date and time for the interview first!")
+            return
+        
+        # Convert the scheduled datetime to UTC for Zoom API
+        local_tz = pytz.timezone(local_timezone)
+        scheduled_datetime = st.session_state["scheduled_datetime"]
+        local_dt = local_tz.localize(scheduled_datetime, is_dst=None)
+        utc_dt = local_dt.astimezone(pytz.utc)
+        meeting_time_iso = utc_dt.strftime("%Y-%m-%dT%H:%M:%SZ")  # ISO 8601 format
+
         # Step 1: Get Zoom OAuth token
         zoom_token_url = "https://zoom.us/oauth/token"
         zoom_payload = {
@@ -341,9 +357,6 @@ def schedule_interview(zoom_acc_id, zoom_client_id, zoom_secret, sender_email, s
 
         # Step 2: Schedule a Zoom meeting
         zoom_meeting_url = "https://api.zoom.us/v2/users/me/meetings"
-        meeting_time = datetime.utcnow() + timedelta(days=1)  # 24 hours from now
-        meeting_time_iso = meeting_time.strftime("%Y-%m-%dT%H:%M:%SZ")  # ISO 8601 format
-        
         meeting_details = {
             "topic": f"Interview for {role}",
             "type": 2,  # Scheduled meeting
@@ -377,8 +390,8 @@ def schedule_interview(zoom_acc_id, zoom_client_id, zoom_secret, sender_email, s
 
         Meeting Details:
         - Link: {meeting_link}
-        - Date: {meeting_time.strftime('%Y-%m-%d')}
-        - Time: {meeting_time.strftime('%H:%M:%S')} UTC
+        - Date: {local_dt.strftime('%Y-%m-%d')}
+        - Time: {local_dt.strftime('%I:%M %p')} ({local_timezone})
 
         Instructions:
         - Please ensure that you join the interview on time.
@@ -410,6 +423,7 @@ def schedule_interview(zoom_acc_id, zoom_client_id, zoom_secret, sender_email, s
     except Exception as e:
         logger.error(f"Error scheduling interview: {str(e)}")
         st.error("Unable to schedule interview. Please try again.")
+
 
 def main() -> None:
     st.title("AI Recruitment System")
@@ -577,7 +591,8 @@ def main() -> None:
                             st.session_state.get('email_passkey'),
                             st.session_state.get('candidate_email'),
                             role,
-                            st.session_state.get('company_name')
+                            st.session_state.get('company_name'),
+                            "UTC"  # Use UTC timezone for scheduling
 
                         )
                         print("DEBUG: Interview scheduled successfully")  # Debug
