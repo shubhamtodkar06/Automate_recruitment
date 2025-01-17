@@ -14,6 +14,8 @@ from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 import logging
 import streamlit as st
+import json
+import os
 
 
 import streamlit as st
@@ -60,7 +62,10 @@ class CustomZoomTool(ZoomTool):
 
 
 # Role requirements as a constant dictionary
-ROLE_REQUIREMENTS: Dict[str, str] = {
+FILE_PATH = "roles.json"
+
+# Default roles, which will be added to the file only if it is empty
+ROLE_REQUIREMENTS = {
     "ai_ml_engineer": """
         Required Skills:
         - Python, PyTorch/TensorFlow
@@ -70,7 +75,6 @@ ROLE_REQUIREMENTS: Dict[str, str] = {
         - MLOps and model deployment
         - RAG, LLM, Finetuning and Prompt Engineering
     """,
-
     "frontend_engineer": """
         Required Skills:
         - React/Vue.js/Angular
@@ -79,7 +83,6 @@ ROLE_REQUIREMENTS: Dict[str, str] = {
         - State management
         - Frontend testing
     """,
-
     "backend_engineer": """
         Required Skills:
         - Python/Java/Node.js
@@ -90,6 +93,116 @@ ROLE_REQUIREMENTS: Dict[str, str] = {
         - Kubernetes, Docker, CI/CD
     """
 }
+
+def load_roles():
+    """Load roles from the file, or return empty dict if the file doesn't exist or is empty."""
+    try:
+        with open(FILE_PATH, "r") as file:
+            roles = json.load(file)
+            if not roles:  # If file is empty, return an empty dict
+                return {}
+            return roles
+    except FileNotFoundError:
+        return {}
+
+def save_roles(roles):
+    """Save roles to the file."""
+    with open(FILE_PATH, "w") as file:
+        json.dump(roles, file, indent=4)
+
+def manage_roles():
+    """Manage roles by allowing add, edit, or delete functionality."""
+    
+    # Load roles (either from file or default if empty)
+    roles = load_roles()
+    
+    # If roles file is empty, add the default roles
+    if not roles:
+        roles = ROLE_REQUIREMENTS.copy()
+        save_roles(roles)  # Save default roles immediately if the file was empty
+
+    if "custom_roles" not in st.session_state:
+        st.session_state["custom_roles"] = roles
+
+    st.sidebar.subheader("Modify or Add Role Criteria")
+
+    # Select or add a role
+    role_choice = st.selectbox(
+        "Select a role to modify or add:",
+        list(st.session_state["custom_roles"].keys()) + ["Add New Role"]
+    )
+
+    if role_choice == "Add New Role":
+        # Adding new role
+        new_role = st.text_input("Enter the name of the new role:")
+        if new_role:
+            new_criteria = st.text_area("Enter the criteria for the new role:")
+            if st.button("Add Role"):
+                if new_role.strip() == "":
+                    st.error("Role name cannot be empty.")
+                elif not new_criteria.strip():
+                    st.error("Please provide criteria for the new role.")
+                else:
+                    st.session_state["custom_roles"][new_role] = new_criteria
+                    save_roles(st.session_state["custom_roles"])  # Save the new role immediately
+                    st.success(f"New role '{new_role}' added successfully.")
+    else:
+        # Modifying or deleting an existing role
+        st.markdown(f"### Current Criteria for {role_choice}:")
+        st.text_area("", value=st.session_state["custom_roles"][role_choice], height=150, disabled=True)
+
+        # Allow modifications for editable roles
+        new_criteria = st.text_area(
+            f"Modify the criteria for {role_choice}:",
+            value=st.session_state["custom_roles"][role_choice]
+        )
+        
+        if st.button("Save Changes"):
+            if new_criteria.strip() == "":
+                st.error("Criteria cannot be empty.")
+            else:
+                st.session_state["custom_roles"][role_choice] = new_criteria
+                save_roles(st.session_state["custom_roles"])  # Save the change immediately
+                st.success(f"Criteria for '{role_choice}' updated successfully.")
+
+        # Option to delete the role
+        if st.button("Delete Role"):
+            del st.session_state["custom_roles"][role_choice]
+            save_roles(st.session_state["custom_roles"])  # Save after deletion
+            st.success(f"Role '{role_choice}' deleted successfully.")
+
+    # Check if roles file is empty again and add default roles if needed
+    if not st.session_state["custom_roles"]:
+        st.session_state["custom_roles"] = ROLE_REQUIREMENTS.copy()
+        save_roles(st.session_state["custom_roles"])
+
+    return st.session_state["custom_roles"]
+
+
+def schedule_meeting():
+    """
+    Allows the user to input a date and time for scheduling a meeting.
+    Stores the data in session_state for later use.
+    """
+    st.sidebar.subheader("Schedule Meeting")
+
+    # Date and Time Inputs
+    meeting_date = st.date_input("Select Meeting Date:")
+    meeting_time = st.time_input("Select Meeting Time:")
+
+    # Combine date and time into a datetime object
+    if meeting_date and meeting_time:
+        scheduled_datetime = datetime.combine(meeting_date, meeting_time)
+        st.session_state["scheduled_datetime"] = scheduled_datetime
+        st.success(f"Meeting scheduled for: {scheduled_datetime.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # Display scheduled date and time if already set
+    if "scheduled_datetime" in st.session_state:
+        st.sidebar.info(
+            f"Scheduled Meeting:\n{st.session_state['scheduled_datetime'].strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+
+
 
 
 def init_session_state() -> None:
@@ -333,44 +446,8 @@ def main() -> None:
                           'Company Name': st.session_state.company_name}
 ##########################################################################################################################################
         
-        if 'custom_roles' not in st.session_state:
-            st.session_state['custom_roles'] = {}
-        
-        st.sidebar.subheader("Modify or Add Role Criteria")
-
-        final_roles = {**ROLE_REQUIREMENTS, **st.session_state['custom_roles']}
-        # Add a new role or modify an existing one
-        role_choice = st.selectbox(
-            "Select a role to modify or add:",
-            list(final_roles.keys()) + ["Add New Role"]
-        )
-        
-        if role_choice == "Add New Role":
-            new_role = st.text_input("Enter the name of the new role:")
-            if new_role:
-                new_criteria = st.text_area("Enter the criteria for the new role:")
-                if st.button("Add Role"):
-                    if new_role in final_roles:
-                        st.error(f"Role '{new_role}' already exists. Please choose a different name.")
-                    elif new_role.strip() == "":
-                        st.error("Role name cannot be empty.")
-                    elif not new_criteria.strip():
-                        st.error("Please provide criteria for the new role.")
-                    else:
-                        # Add the new role to session state
-                        st.session_state['custom_roles'][new_role] = new_criteria
-                        st.success(f"New role '{new_role}' added successfully.")
-        else:
-            # If an existing role is selected, allow editing its criteria
-            new_criteria = st.text_area(f"Modify the criteria for {role_choice}:", value=final_roles[role_choice])
-            if st.button("Save Changes"):
-                if new_criteria.strip() == "":
-                    st.error("Criteria cannot be empty.")
-                else:
-                    # Update the selected role's criteria
-                    st.session_state['custom_roles'][role_choice] = new_criteria
-                    st.success(f"Criteria for '{role_choice}' updated successfully.")
-
+        final_roles = manage_roles()
+        schedule_meeting()
 #########################################################################################################################################
     missing_configs = [k for k, v in required_configs.items() if not v]
     if missing_configs:
