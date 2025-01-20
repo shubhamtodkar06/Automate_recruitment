@@ -319,12 +319,56 @@ def send_rejection_email(sender_email, sender_password, receiver_email, role, co
         server.sendmail(sender_email, receiver_email, msg.as_string())  # Send the email
  
 
+def ask_to_change_time():
+    """
+    Ask the candidate whether they want to change the interview time.
+    If they confirm, ask for new date and time and update session state.
+    """
+    if 'scheduled_datetime' not in st.session_state:
+        st.error("No interview scheduled yet.")
+        return
+
+    # Display current scheduled interview date and time
+    current_datetime = st.session_state.get('scheduled_datetime')
+    st.write(f"Your interview is currently scheduled for: {current_datetime.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # Ask if they want to change the time
+    change_time = st.radio("Do you want to change the interview time?", ["No", "Yes"])
+
+    if change_time == "Yes":
+        today = datetime.now(pytz.timezone("UTC"))
+        default_date = today.date()
+        default_time = today.time().replace(minute=0, second=0, microsecond=0)
+
+        # Candidate selects new date and time
+        interview_date = st.date_input("Select a new date", min_value=today.date(), value=default_date)
+        interview_time = st.time_input("Select a new time", value=default_time)
+
+        if st.button("Confirm New Interview Time"):
+            new_interview_datetime = datetime.combine(interview_date, interview_time)
+            # Convert the datetime to the appropriate timezone (e.g., UTC)
+            timezone = pytz.timezone("UTC")
+            localized_datetime = timezone.localize(new_interview_datetime)
+
+            st.session_state['scheduled_datetime'] = localized_datetime  # Update session state with new time
+            st.success(f"Your interview has been rescheduled to {localized_datetime.strftime('%Y-%m-%d %H:%M:%S')} (UTC).")
+            st.session_state['change_time_confirmed'] = True  # Flag that the time has been changed
+
+    elif change_time == "No":
+        st.write("You have opted to keep the existing interview time.")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-def schedule_interview(zoom_acc_id, zoom_client_id, zoom_secret, sender_email, sender_password, receiver_email, recruiter_email, role: str, company: str, local_timezone: str) -> None:
+def schedule_interview(
+    zoom_acc_id, zoom_client_id, zoom_secret, sender_email, 
+    sender_password, receiver_email, recruiter_email, role: str, company: str, local_timezone: str
+) -> None:
     try:
+        # Ensure the date and time for scheduling are set
+        if "scheduled_datetime" not in st.session_state:
+            st.error("Please schedule a date and time for the interview first!")
+            return
+        
         # Step 1: Show the allocated interview time
         st.subheader("Interview Date & Time Allocation")
         
@@ -336,122 +380,102 @@ def schedule_interview(zoom_acc_id, zoom_client_id, zoom_secret, sender_email, s
         # Show the allocated interview date and time
         scheduled_datetime = st.session_state['scheduled_datetime']
         st.write(f"Your interview is scheduled for {scheduled_datetime.strftime('%Y-%m-%d %H:%M:%S')} ({local_timezone})")
-        
-        # Step 2: Allow candidate to change the time (if desired)
-        change_time = st.radio("Do you want to change the interview time?", ["No", "Yes"])
-        
-        if change_time == "Yes":
-            # Allow candidate to select a new date and time if they want to change
-            today = datetime.now(pytz.timezone(local_timezone))
-            default_date = today.date()
-            default_time = today.time().replace(minute=0, second=0, microsecond=0)
-            interview_date = st.date_input("Select a new date", min_value=today.date(), value=default_date)
-            interview_time = st.time_input("Select a new time", value=default_time)
 
-            # Button to confirm the interview time change
-            if st.button("Confirm New Interview Date & Time"):
-                candidate_datetime = datetime.combine(interview_date, interview_time)
-                localized_datetime = pytz.timezone(local_timezone).localize(candidate_datetime)
-                st.session_state['scheduled_datetime'] = localized_datetime
-                st.success(f"Your interview has been rescheduled to {localized_datetime.strftime('%Y-%m-%d %H:%M:%S')} ({local_timezone})")
-        else:
-            st.write("You have opted to keep the original scheduled date and time.")
+        # Convert the scheduled datetime to UTC for Zoom API
+        local_tz = pytz.timezone(local_timezone)
+        local_dt = local_tz.localize(scheduled_datetime, is_dst=None)
+        utc_dt = local_dt.astimezone(pytz.utc)
+        meeting_time_iso = utc_dt.strftime("%Y-%m-%dT%H:%M:%SZ")  # ISO 8601 format
 
-        # Step 3: Proceed with Zoom scheduling
-        # If the candidate didn't change the time, it will proceed with the original scheduled date and time
-        if "scheduled_datetime" in st.session_state:
-            scheduled_datetime = st.session_state["scheduled_datetime"]
+        # Step 2: Get Zoom OAuth token
+        zoom_token_url = "https://zoom.us/oauth/token"
+        zoom_payload = {
+            'grant_type': 'account_credentials',
+            'account_id': zoom_acc_id
+        }
+        auth = (zoom_client_id, zoom_secret)
 
-            # Convert the scheduled datetime to UTC for Zoom API
-            local_tz = pytz.timezone(local_timezone)
-            local_dt = local_tz.localize(scheduled_datetime, is_dst=None)
-            utc_dt = local_dt.astimezone(pytz.utc)
-            meeting_time_iso = utc_dt.strftime("%Y-%m-%dT%H:%M:%SZ")  # ISO 8601 format
+        token_response = requests.post(zoom_token_url, data=zoom_payload, auth=auth)
+        token_response.raise_for_status()
+        access_token = token_response.json().get('access_token')
+        if not access_token:
+            raise ValueError("Failed to fetch Zoom access token.")
 
-            # Step 4: Get Zoom OAuth token
-            zoom_token_url = "https://zoom.us/oauth/token"
-            zoom_payload = {
-                'grant_type': 'account_credentials',
-                'account_id': zoom_acc_id
+        # Step 3: Schedule a Zoom meeting
+        zoom_meeting_url = "https://api.zoom.us/v2/users/me/meetings"
+        meeting_details = {
+            "topic": f"Interview for {role}",
+            "type": 2,  # Scheduled meeting
+            "start_time": meeting_time_iso,
+            "duration": 60,  # Meeting duration in minutes
+            "timezone": "UTC",
+            "settings": {
+                "join_before_host": True,
+                "waiting_room": False
             }
-            auth = (zoom_client_id, zoom_secret)
-            
-            token_response = requests.post(zoom_token_url, data=zoom_payload, auth=auth)
-            token_response.raise_for_status()
-            access_token = token_response.json().get('access_token')
+        }
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
 
-            if not access_token:
-                raise ValueError("Failed to fetch Zoom access token.")
+        meeting_response = requests.post(zoom_meeting_url, json=meeting_details, headers=headers)
+        meeting_response.raise_for_status()
+        meeting_data = meeting_response.json()
+        meeting_link = meeting_data.get('join_url')
 
-            # Step 5: Schedule a Zoom meeting
-            zoom_meeting_url = "https://api.zoom.us/v2/users/me/meetings"
-            meeting_details = {
-                "topic": f"Interview for {role}",
-                "type": 2,  # Scheduled meeting
-                "start_time": meeting_time_iso,
-                "duration": 60,  # Meeting duration in minutes
-                "timezone": "UTC",
-                "settings": {
-                    "join_before_host": True,
-                    "waiting_room": False
-                }
-            }
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json"
-            }
+        if not meeting_link:
+            raise ValueError("Failed to schedule Zoom meeting.")
 
-            meeting_response = requests.post(zoom_meeting_url, json=meeting_details, headers=headers)
-            meeting_response.raise_for_status()
-            meeting_data = meeting_response.json()
-            meeting_link = meeting_data.get('join_url')
+        # Step 4: Send email with meeting details
+        subject = f"Interview Scheduled for {role} at {company}"
+        body = f"""
+        Dear Candidate,
 
-            if not meeting_link:
-                raise ValueError("Failed to schedule Zoom meeting.")
+        We are pleased to inform you that your interview for the {role} role at {company} has been scheduled.
 
-            # Step 6: Send email with meeting details
-            subject = f"Interview Scheduled for {role} at {company}"
-            body = f"""
-            Dear Candidate,
+        Meeting Details:
+        - Link: {meeting_link}
+        - Date: {scheduled_datetime.strftime('%Y-%m-%d')}
+        - Time: {scheduled_datetime.strftime('%H:%M:%S')} ({local_timezone})
 
-            We are pleased to inform you that your interview for the {role} role at {company} has been scheduled.
+        Instructions:
+        - Please ensure that you join the interview on time.
+        - Test your camera and microphone in advance to ensure they are working correctly.
+        - Use a quiet environment to avoid distractions during the interview.
+        - Dress appropriately as you would for an in-person interview.
+        - Ensure your internet connection is stable for a smooth interview experience.
 
-            Meeting Details:
-            - Link: {meeting_link}
-            - Date: {local_dt.strftime('%Y-%m-%d')}
-            - Time: {local_dt.strftime('%I:%M %p')} ({local_timezone})
+        We look forward to meeting with you and discussing your qualifications for the {role} role.
 
-            Instructions:
-            - Please ensure that you join the interview on time.
-            - Test your camera and microphone in advance to ensure they are working correctly.
-            - Use a quiet environment to avoid distractions during the interview.
-            - Dress appropriately as you would for an in-person interview.
-            - Ensure your internet connection is stable for a smooth interview experience.
+        Best regards,
+        {company} Hiring Team
+        """
 
-            We look forward to meeting with you and discussing your qualifications for the {role} role.
+        # Properly format multiple recipients
+        recipients = [receiver_email, recruiter_email]
+        message = MIMEMultipart()
+        message['From'] = sender_email
+        message['To'] = ", ".join(recipients)  # Correctly format the To field
+        message['Subject'] = subject
+        message.attach(MIMEText(body, 'plain'))
 
-            Best regards,
-            {company} Hiring Team
-            """
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()
+            server.login(sender_email, sender_password)
+            server.send_message(message)
 
-            message = MIMEMultipart()
-            message['From'] = sender_email
-            message['To'] = ", ".join([receiver_email, recruiter_email])
-            message['Subject'] = subject
-            message.attach(MIMEText(body, 'plain'))
-
-            with smtplib.SMTP('smtp.gmail.com', 587) as server:
-                server.starttls()
-                server.login(sender_email, sender_password)
-                server.send_message(message)
-
-            st.success("Interview scheduled successfully! Check your email for details.")
-            logger.info("Interview scheduled and email sent successfully.")
+        st.success("Interview scheduled successfully! Check your email for details.")
+        logger.info("Interview scheduled and email sent successfully.")
 
     except Exception as e:
         logger.error(f"Error scheduling interview: {str(e)}")
         st.error("Unable to schedule interview. Please try again.")
 
+
+    except Exception as e:
+        logger.error(f"Error scheduling interview: {str(e)}")
+        st.error("Unable to schedule interview. Please try again.")
 
 def main() -> None:
     st.title("AI Recruitment System")
