@@ -213,7 +213,7 @@ def init_session_state() -> None:
         'is_selected': False, 'zoom_account_id': "", 'zoom_client_id': "", 'zoom_client_secret': "",
         'email_sender': "", 'email_passkey': "", 'company_name': "", 'current_pdf': None,
         'time_change_requested': False, 'scheduled_datetime': None, 'proceed_app' : False,
-        'check_it' : False, 'no_button' : False
+        'check_it' : False, 'no_button' : False, 'time_and_date' : False, 'check_again' : False, 'fragment' : False
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -430,8 +430,6 @@ def schedule_interview(
             server.login(sender_email, sender_password)
             server.send_message(message)
 
-        st.success("Interview scheduled successfully! Check your email for details.")
-        logger.info("Interview scheduled and email sent successfully.")
 
     except Exception as e:
         logger.error(f"Error scheduling interview: {str(e)}")
@@ -442,23 +440,9 @@ def schedule_interview(
         logger.error(f"Error scheduling interview: {str(e)}")
         st.error("Unable to schedule interview. Please try again.")
 
-from datetime import datetime
-import streamlit as st
 
-# Function to get available times from a file (assuming the file contains a list of strings with date-time in "%Y-%m-%d %H:%M" format)
-def get_available_times_from_file(file_path):
-    try:
-        with open(file_path, 'r') as file:
-            data = json.load(file)
-            return data.get("available_times", [])
-    except Exception as e:
-        st.error(f"Error reading available times from file: {e}")
-        return []
-
-# Function to ask for a change in time and date
 def ask_for_time_change():
     """Asks the candidate if they want to change the interview time."""
-    st.session_state.check_it = True
 
     if "time_change_requested" not in st.session_state:
         st.session_state.time_change_requested = False
@@ -483,6 +467,50 @@ def ask_for_time_change():
         st.write("You have opted to keep the original scheduled time.")
 
     return st.session_state.time_change_requested  # return the value to know whether to proceed with scheduling or not
+
+
+import streamlit as st
+import json
+from datetime import datetime
+
+def update_meeting_schedule():
+    """
+    Updates the meeting schedule by allowing the user to select from predefined dates and times.
+    Updates st.session_state["scheduled_datetime"] accordingly.
+    """
+    st.sidebar.subheader("Update Meeting Schedule")
+
+    # Load predefined available times from the JSON file
+    with open(
+        r"C:\Users\Admin\python_project\awesome-llm-apps\ai_agent_tutorials\ai_recruitment_agent_team\predefined_times.json",
+        "r",
+    ) as file:
+        predefined_data = json.load(file)
+
+    available_times = predefined_data.get("available_times", [])
+    available_times_formatted = [datetime.strptime(t, "%Y-%m-%d %H:%M:%S") for t in available_times]
+
+    # Display available times in a dropdown
+    selected_time = st.selectbox(
+        "Select a new meeting date and time:",
+        options=available_times_formatted,
+        format_func=lambda x: x.strftime("%Y-%m-%d %H:%M:%S"),
+    )
+
+    # Update session state if a selection is made
+    if selected_time:
+        if "scheduled_datetime" not in st.session_state or st.session_state["scheduled_datetime"] != selected_time:
+            st.session_state["scheduled_datetime"] = selected_time
+            st.success(f"Meeting updated to: {selected_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        else:
+            st.info("No changes made to the meeting schedule.")
+
+    # Display the updated date and time
+    if "scheduled_datetime" in st.session_state:
+        st.sidebar.info(
+            f"Updated Meeting:\n"
+            f"{st.session_state['scheduled_datetime'].strftime('%Y-%m-%d %H:%M:%S')}"
+        )
 
 
 def main() -> None:
@@ -541,15 +569,69 @@ def main() -> None:
         else:
             st.session_state.recruiter_email = "setodkar6@gmail.com"
 
+        
+        final_roles = manage_roles()
+        schedule_meeting()
+        st.sidebar.subheader("Manage Interview Slots")
+        st.subheader("Available Slots for Self-Scheduling Interviews")
+
+        # Define the path to the predefined times file
+        predefined_times_path = r"C:\Users\Admin\python_project\awesome-llm-apps\ai_agent_tutorials\ai_recruitment_agent_team\predefined_times.json"
+
+        # Load available times into session state
+        if "available_times" not in st.session_state:
+            try:
+                with open(predefined_times_path, "r") as file:
+                    predefined_data = json.load(file)
+                    st.session_state.available_times = predefined_data.get("available_times", [])
+            except FileNotFoundError:
+                st.session_state.available_times = []
+
+        # Display current available slots
+        st.write("Current Available Slots:")
+        for i, slot in enumerate(st.session_state.available_times):
+            st.write(f"{i + 1}. {slot}")
+
+        # Add a new slot
+        with st.form("add_slot_form"):
+            st.write("Add a New Slot")
+            new_date = st.date_input("New Slot Date:", key="add_date")
+            new_time = st.time_input("New Slot Time:", key="add_time")
+            add_slot = st.form_submit_button("Add Slot")
+
+            if add_slot and new_date and new_time:
+                new_slot = f"{new_date} {new_time}"
+                if new_slot not in st.session_state.available_times:
+                    st.session_state.available_times.append(new_slot)
+                    st.success(f"Slot {new_slot} added successfully!")
+                else:
+                    st.warning("This slot already exists.")
+
+        # Remove an existing slot
+        with st.form("remove_slot_form"):
+            st.write("Remove an Existing Slot")
+            if st.session_state.available_times:
+                slot_to_remove = st.selectbox("Select Slot to Remove:", options=st.session_state.available_times, key="remove_slot")
+                remove_slot = st.form_submit_button("Remove Slot")
+
+                if remove_slot and slot_to_remove:
+                    st.session_state.available_times.remove(slot_to_remove)
+                    st.success(f"Slot {slot_to_remove} removed successfully!")
+            else:
+                st.info("No available slots to remove.")
+
+        # Save updated slots to the JSON file
+        with open(predefined_times_path, "w") as file:
+            json.dump({"available_times": st.session_state.available_times}, file, indent=4)
+
+        st.write("Changes saved successfully!")
+
+
         required_configs = {'OpenAI API Key': st.session_state.openai_api_key, 'Zoom Account ID': st.session_state.zoom_account_id,
                           'Zoom Client ID': st.session_state.zoom_client_id, 'Zoom Client Secret': st.session_state.zoom_client_secret,
                           'Email Sender': st.session_state.email_sender, 'Email Password': st.session_state.email_passkey,
                           'Company Name': st.session_state.company_name}
-##########################################################################################################################################
-        
-        final_roles = manage_roles()
-        schedule_meeting()
-#########################################################################################################################################
+
     missing_configs = [k for k, v in required_configs.items() if not v]
     if missing_configs:
         st.warning(f"Please configure the following in the sidebar: {', '.join(missing_configs)}")
@@ -676,7 +758,7 @@ def main() -> None:
                     # 4. Schedule interview
                     with st.status("📅 Scheduling interview...", expanded=True):
                         print("DEBUG: Attempting to schedule interview")  # Debug
-                        
+
                     st.rerun()
 
                 except Exception as e:
@@ -690,16 +772,21 @@ def main() -> None:
 
     if not st.session_state.get('no_button') and st.session_state.get('proceed_app'):
         st.success("Confimation email sent successfully!")
-        st.info("CSchedule interview time out of given time!")
+        st.info("Schedule interview time out of given time!")
         st.session_state.time_change_requested = ask_for_time_change()
-        st.session_state.check_it = True
-        st.session_state.no_button = True
+        st.session_state.check_again = True
 
-    if st.session_state.get('check_it'):   
+    if st.session_state.get('time_change_requested') and not st.session_state.get('time_and_date'):
+        st.session_state.check_it = True
+        update_meeting_schedule() 
+    else:
+        st.session_state.check_it = True
+
+
+    if st.session_state.get('check_it') and st.session_state.get('check_again') and not st.session_state.get('fragment'):
         if st.button("Proceed with Schedule", key="schedule_button"):
-    # Proceed with scheduling interview after confirming the time
-        
-            # Proceed to schedule the interview using the updated time
+            st.session_state.no_button = True
+            st.session_state.time_and_date = True
             schedule_interview(
                 st.session_state.get('zoom_account_id'),
                 st.session_state.get('zoom_client_id'),
@@ -712,21 +799,26 @@ def main() -> None:
                 st.session_state.get('company_name'),
                 "UTC"
             )
-            st.success("Interview scheduled successfully!")
+            st.session_state.fragment = True
+            st.rerun()
 
-            print("DEBUG: All processes completed successfully")  # Debug
-            st.success("""
-                🎉 Application Successfully Processed!
-                
-                Please check your email for:
-                1. Selection confirmation ✅
-                2. Interview details with Zoom link 🔗
-                
-                Next steps:
-                1. Review the role requirements
-                2. Prepare for your technical interview
-                3. Join the interview 5 minutes early
-            """)
+    if st.session_state.get('fragment'):
+        st.success("Interview scheduled successfully! Check your email for details.")
+        st.info("Interview scheduled and email sent successfully.")
+        st.info("Take assessment test!")
+        print("DEBUG: All processes completed successfully")  # Debug
+        st.success("""
+            🎉 Application Successfully Processed!
+            
+            Please check your email for:
+            1. Selection confirmation ✅
+            2. Interview details with Zoom link 🔗
+            
+            Next steps:
+            1. Review the role requirements
+            2. Prepare for your technical interview
+            3. Join the interview 5 minutes early
+        """)
 
 
     # Reset button
