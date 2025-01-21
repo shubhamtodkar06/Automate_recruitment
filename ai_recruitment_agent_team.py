@@ -436,11 +436,6 @@ def schedule_interview(
         st.error("Unable to schedule interview. Please try again.")
 
 
-    except Exception as e:
-        logger.error(f"Error scheduling interview: {str(e)}")
-        st.error("Unable to schedule interview. Please try again.")
-
-
 def ask_for_time_change():
     """Asks the candidate if they want to change the interview time."""
 
