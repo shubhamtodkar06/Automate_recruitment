@@ -211,11 +211,14 @@ def init_session_state() -> None:
     defaults = {
         'candidate_email': "", 'openai_api_key': "", 'recruiter_email': "" ,'resume_text': "", 'analysis_complete': False,
         'is_selected': False, 'zoom_account_id': "", 'zoom_client_id': "", 'zoom_client_secret': "",
-        'email_sender': "", 'email_passkey': "", 'company_name': "", 'current_pdf': None
+        'email_sender': "", 'email_passkey': "", 'company_name': "", 'current_pdf': None,
+        'time_change_requested': False, 'scheduled_datetime': None, 'proceed_app' : False,
+        'check_it' : False, 'no_button' : False
     }
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+
 
 def extract_text_from_pdf(pdf_file) -> str:
     try:
@@ -318,44 +321,6 @@ def send_rejection_email(sender_email, sender_password, receiver_email, role, co
         server.login(sender_email, sender_password)  # Login with the sender's credentials
         server.sendmail(sender_email, receiver_email, msg.as_string())  # Send the email
  
-
-def ask_to_change_time():
-    """
-    Ask the candidate whether they want to change the interview time.
-    If they confirm, ask for new date and time and update session state.
-    """
-    if 'scheduled_datetime' not in st.session_state:
-        st.error("No interview scheduled yet.")
-        return
-
-    # Display current scheduled interview date and time
-    current_datetime = st.session_state.get('scheduled_datetime')
-    st.write(f"Your interview is currently scheduled for: {current_datetime.strftime('%Y-%m-%d %H:%M:%S')}")
-
-    # Ask if they want to change the time
-    change_time = st.radio("Do you want to change the interview time?", ["No", "Yes"])
-
-    if change_time == "Yes":
-        today = datetime.now(pytz.timezone("UTC"))
-        default_date = today.date()
-        default_time = today.time().replace(minute=0, second=0, microsecond=0)
-
-        # Candidate selects new date and time
-        interview_date = st.date_input("Select a new date", min_value=today.date(), value=default_date)
-        interview_time = st.time_input("Select a new time", value=default_time)
-
-        if st.button("Confirm New Interview Time"):
-            new_interview_datetime = datetime.combine(interview_date, interview_time)
-            # Convert the datetime to the appropriate timezone (e.g., UTC)
-            timezone = pytz.timezone("UTC")
-            localized_datetime = timezone.localize(new_interview_datetime)
-
-            st.session_state['scheduled_datetime'] = localized_datetime  # Update session state with new time
-            st.success(f"Your interview has been rescheduled to {localized_datetime.strftime('%Y-%m-%d %H:%M:%S')} (UTC).")
-            st.session_state['change_time_confirmed'] = True  # Flag that the time has been changed
-
-    elif change_time == "No":
-        st.write("You have opted to keep the existing interview time.")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -477,6 +442,49 @@ def schedule_interview(
         logger.error(f"Error scheduling interview: {str(e)}")
         st.error("Unable to schedule interview. Please try again.")
 
+from datetime import datetime
+import streamlit as st
+
+# Function to get available times from a file (assuming the file contains a list of strings with date-time in "%Y-%m-%d %H:%M" format)
+def get_available_times_from_file(file_path):
+    try:
+        with open(file_path, 'r') as file:
+            data = json.load(file)
+            return data.get("available_times", [])
+    except Exception as e:
+        st.error(f"Error reading available times from file: {e}")
+        return []
+
+# Function to ask for a change in time and date
+def ask_for_time_change():
+    """Asks the candidate if they want to change the interview time."""
+    st.session_state.check_it = True
+
+    if "time_change_requested" not in st.session_state:
+        st.session_state.time_change_requested = False
+
+    current_time = st.session_state.get("scheduled_datetime", None)
+    if not current_time:
+        st.warning("No interview time assigned by the recruiter yet.")
+        return
+
+    st.write(f"Current interview time: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # Use a key for the radio button to maintain state across reruns
+    change_time = st.radio("Would you like to change the interview time?", ["No", "Yes"], index=1, key="change_time_radio")
+    print(change_time)
+    
+    if change_time == "Yes":
+        st.session_state.time_change_requested = True  # set to true when user click yes
+       
+
+    elif change_time == "No":
+        st.session_state.time_change_requested = False  # set to false when user click No
+        st.write("You have opted to keep the original scheduled time.")
+
+    return st.session_state.time_change_requested  # return the value to know whether to proceed with scheduling or not
+
+
 def main() -> None:
     st.title("AI Recruitment System")
 
@@ -488,6 +496,7 @@ def main() -> None:
         st.subheader("OpenAI Settings")
         api_key = st.text_input("OpenAI API Key", type="password", value=st.session_state.openai_api_key, help="Get your API key from platform.openai.com")
         if api_key: st.session_state.openai_api_key = api_key
+        else: st.session_state.openai_api_key = "sk-1234567890abcdef1234567890abcdef"
 
         st.subheader("Zoom Settings")
         zoom_account_id = st.text_input("Zoom Account ID", type="password", value=st.session_state.zoom_account_id)
@@ -500,13 +509,37 @@ def main() -> None:
         email_passkey = st.text_input("Email App Password", type="password", value=st.session_state.email_passkey, help="App-specific password for email")
         company_name = st.text_input("Company Name", value=st.session_state.company_name, help="Name to use in email communications")
 
-        if zoom_account_id: st.session_state.zoom_account_id = zoom_account_id
-        if zoom_client_id: st.session_state.zoom_client_id = zoom_client_id
-        if zoom_client_secret: st.session_state.zoom_client_secret = zoom_client_secret
-        if email_sender: st.session_state.email_sender = email_sender
-        if email_passkey: st.session_state.email_passkey = email_passkey
-        if company_name: st.session_state.company_name = company_name
-        if recruiter_email: st.session_state.recruiter_email = recruiter_email
+        if zoom_account_id:
+            st.session_state.zoom_account_id = zoom_account_id
+        else:
+            st.session_state.zoom_account_id = "Ad5Btk3mQ2S9n39sTys4Qg"
+
+        if zoom_client_id:
+            st.session_state.zoom_client_id = zoom_client_id
+        else:
+            st.session_state.zoom_client_id = "6RezhEmWQ7qVGwGrUKuPMQ"
+        if zoom_client_secret:
+            st.session_state.zoom_client_secret = zoom_client_secret
+        else:
+            st.session_state.zoom_client_secret = "woLGmXOtR4PAtfPDQfoy9JWkWOUoo5lK"
+        if email_sender:
+            st.session_state.email_sender = email_sender
+        else:
+            st.session_state.email_sender = "setooproject00@gmail.com"
+
+        if email_passkey:
+            st.session_state.email_passkey = email_passkey
+        else:
+            st.session_state.email_passkey = "kpcxquihonbqissr"
+
+        if company_name:
+            st.session_state.company_name = company_name
+        else:
+            st.session_state.company_name = "Setoo"
+        if recruiter_email: 
+            st.session_state.recruiter_email = recruiter_email
+        else:
+            st.session_state.recruiter_email = "setodkar6@gmail.com"
 
         required_configs = {'OpenAI API Key': st.session_state.openai_api_key, 'Zoom Account ID': st.session_state.zoom_account_id,
                           'Zoom Client ID': st.session_state.zoom_client_id, 'Zoom Client Secret': st.session_state.zoom_client_secret,
@@ -572,15 +605,18 @@ def main() -> None:
                     st.error("Could not process the PDF. Please try again.")
 
     # Email input with session state
-    email = st.text_input(
+    email_can = st.text_input(
         "Candidate's email address",
         value=st.session_state.candidate_email,
         key="email_input"
     )
-    st.session_state.candidate_email = email
+    if email_can :
+        st.session_state.candidate_email = email_can
+    else:
+        st.session_state.candidate_email = "setodkar06@gmail.com"
 
     # Analysis and next steps
-    if st.session_state.resume_text and email and not st.session_state.analysis_complete:
+    if st.session_state.resume_text and st.session_state.candidate_email and not st.session_state.analysis_complete:
         if st.button("Analyze Resume"):
             with st.spinner("Analyzing your resume..."):
                 
@@ -615,7 +651,7 @@ def main() -> None:
                                 logger.error(f"Error sending rejection email: {e}")
                                 st.error("Could not send feedback email. Please try again.")
 
-    if st.session_state.get('analysis_complete') and st.session_state.get('is_selected', False):
+    if st.session_state.get('analysis_complete') and st.session_state.get('is_selected', False) and not st.session_state.get('proceed_app'):
         st.success("Congratulations! Your skills match our requirements.")
         st.info("Click 'Proceed with Application' to continue with the interview process.")
         
@@ -635,38 +671,13 @@ def main() -> None:
                         print("DEBUG: Email sent successfully")  # Debug
                         status.update(label="✅ Confirmation email sent!")
 
+                    st.session_state.proceed_app = True
+                    
                     # 4. Schedule interview
-                    with st.status("📅 Scheduling interview...", expanded=True) as status:
+                    with st.status("📅 Scheduling interview...", expanded=True):
                         print("DEBUG: Attempting to schedule interview")  # Debug
-                        schedule_interview(
-                            st.session_state.get('zoom_account_id'),
-                            st.session_state.get('zoom_client_id'),
-                            st.session_state.get('zoom_client_secret'),
-                            st.session_state.get('email_sender'),
-                            st.session_state.get('email_passkey'),
-                            st.session_state.get('candidate_email'),
-                            st.session_state.get('recruiter_email'),
-                            role,
-                            st.session_state.get('company_name'),
-                            "UTC"  # Use UTC timezone for scheduling
-
-                        )
-                        print("DEBUG: Interview scheduled successfully")  # Debug
-                        status.update(label="✅ Interview scheduled!")
-
-                    print("DEBUG: All processes completed successfully")  # Debug
-                    st.success("""
-                        🎉 Application Successfully Processed!
                         
-                        Please check your email for:
-                        1. Selection confirmation ✅
-                        2. Interview details with Zoom link 🔗
-                        
-                        Next steps:
-                        1. Review the role requirements
-                        2. Prepare for your technical interview
-                        3. Join the interview 5 minutes early
-                    """)
+                    st.rerun()
 
                 except Exception as e:
                     print(f"DEBUG: Error occurred: {str(e)}")  # Debug
@@ -675,6 +686,48 @@ def main() -> None:
                     print(f"DEBUG: Full traceback: {traceback.format_exc()}")  # Debug
                     st.error(f"An error occurred: {str(e)}")
                     st.error("Please try again or contact support.")
+                    
+
+    if not st.session_state.get('no_button') and st.session_state.get('proceed_app'):
+        st.success("Confimation email sent successfully!")
+        st.info("CSchedule interview time out of given time!")
+        st.session_state.time_change_requested = ask_for_time_change()
+        st.session_state.check_it = True
+        st.session_state.no_button = True
+
+    if st.session_state.get('check_it'):   
+        if st.button("Proceed with Schedule", key="schedule_button"):
+    # Proceed with scheduling interview after confirming the time
+        
+            # Proceed to schedule the interview using the updated time
+            schedule_interview(
+                st.session_state.get('zoom_account_id'),
+                st.session_state.get('zoom_client_id'),
+                st.session_state.get('zoom_client_secret'),
+                st.session_state.get('email_sender'),
+                st.session_state.get('email_passkey'),
+                st.session_state.get('candidate_email'),
+                st.session_state.get('recruiter_email'),
+                role,
+                st.session_state.get('company_name'),
+                "UTC"
+            )
+            st.success("Interview scheduled successfully!")
+
+            print("DEBUG: All processes completed successfully")  # Debug
+            st.success("""
+                🎉 Application Successfully Processed!
+                
+                Please check your email for:
+                1. Selection confirmation ✅
+                2. Interview details with Zoom link 🔗
+                
+                Next steps:
+                1. Review the role requirements
+                2. Prepare for your technical interview
+                3. Join the interview 5 minutes early
+            """)
+
 
     # Reset button
     if st.sidebar.button("Reset Application"):
