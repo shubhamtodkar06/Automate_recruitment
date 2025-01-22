@@ -18,12 +18,71 @@ import json
 import os
 import pytz
 import logging
-
+import json
+import pandas as pd
+import streamlit as st
+import matplotlib.pyplot as plt
 import streamlit as st
 from phi.tools.zoom import ZoomTool
 from phi.utils.log import logger
 from streamlit_pdf_viewer import pdf_viewer
 
+def display_analytics():
+    # Load data from analytics.json
+    try:
+        with open("analytics.json", "r") as file:
+            analytics_data = json.load(file)
+    except FileNotFoundError:
+        st.error("The file 'analytics.json' was not found.")
+        return
+    except json.JSONDecodeError:
+        st.error("Error decoding JSON data. Please check the file format.")
+        return
+
+    # Extract role-based data
+    role_data = analytics_data.get("roles", {})
+    role_df = pd.DataFrame(role_data).T  # Transpose to make roles rows instead of columns
+    role_df.reset_index(inplace=True)
+    role_df.rename(columns={"index": "Role"}, inplace=True)
+
+    # Display role-based table
+    st.subheader("Role-Based Analytics")
+    st.table(role_df)
+
+    # Plot role-based bar graph
+    st.subheader("Role-Based Bar Graph")
+    fig, ax = plt.subplots(figsize=(10, 6))
+    role_df.set_index("Role")[["total_applicants", "selected_for_test", "passed", "failed"]].plot(
+        kind="bar", ax=ax
+    )
+    plt.title("Applicants Breakdown by Role", fontsize=14)
+    plt.xlabel("Roles", fontsize=12)
+    plt.ylabel("Number of Applicants", fontsize=12)
+    plt.xticks(rotation=45)
+    plt.legend(title="Metrics")
+    st.pyplot(fig)
+
+    # Extract interview data
+    interviews_data = analytics_data.get("interviews", [])
+    if interviews_data:
+        interview_df = pd.DataFrame(interviews_data)
+
+        # Display interview table
+        st.subheader("Scheduled Interviews")
+        st.table(interview_df)
+
+        # Plot interview count by role
+        st.subheader("Interviews Per Role")
+        role_counts = interview_df["role"].value_counts()
+        fig, ax = plt.subplots(figsize=(8, 5))
+        role_counts.plot(kind="bar", color="skyblue", ax=ax)
+        plt.title("Number of Interviews by Role", fontsize=14)
+        plt.xlabel("Role", fontsize=12)
+        plt.ylabel("Number of Interviews", fontsize=12)
+        plt.xticks(rotation=45)
+        st.pyplot(fig)
+    else:
+        st.warning("No interviews data available.")
 
 
 class CustomZoomTool(ZoomTool):
@@ -866,13 +925,7 @@ def main() -> None:
         
 
     if st.session_state["show_analytics"]:
-        # Analytics Page Content
-        st.title("Analytics Dashboard")
-        st.write("Welcome to the analytics section.")
-        st.bar_chart([5, 8, 2, 6])
-        st.line_chart([1, 2, 3, 4])
-        st.area_chart([5, 3, 7, 1])
-
+        display_analytics()
 
     missing_configs = [k for k, v in required_configs.items() if not v]
     if missing_configs:
