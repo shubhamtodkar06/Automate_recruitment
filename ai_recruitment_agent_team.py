@@ -334,15 +334,6 @@ def add_mcq_question(role_choice):
             # Save the updated MCQs back to the file
             save_mcqs(role_choice, role_mcqs)
             st.success(f"MCQ added for role '{role_choice}' successfully!")
-
-            # Clear the input fields by resetting their session state values
-            st.session_state[f"new_question_{role_choice}"] = ""
-            st.session_state[f"option_1_{role_choice}"] = ""
-            st.session_state[f"option_2_{role_choice}"] = ""
-            st.session_state[f"option_3_{role_choice}"] = ""
-            st.session_state[f"option_4_{role_choice}"] = ""
-            st.session_state[f"correct_option_{role_choice}"] = "Option 1"  # Reset to default value
-
             st.rerun()  # Rerun to reflect changes immediately
 
 def schedule_meeting():
@@ -378,7 +369,8 @@ def init_session_state() -> None:
         'is_selected': False, 'zoom_account_id': "", 'zoom_client_id': "", 'zoom_client_secret': "",
         'email_sender': "", 'email_passkey': "", 'company_name': "", 'current_pdf': None,
         'time_change_requested': False, 'scheduled_datetime': None, 'proceed_app' : False, 'test_conducted' : False,
-        'check_it' : False, 'no_button' : False, 'time_and_date' : False, 'check_again' : False, 'fragment' : False, 'go_ahead' : False, 'session_to_proceed' : False
+        'check_it' : False, 'no_button' : False, 'time_and_date' : False, 'check_again' : False, 'fragment' : False, 'go_ahead' : False, 'session_to_proceed' : False,
+        'show_analytics' : False
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -755,6 +747,10 @@ def main() -> None:
     with st.sidebar:
         st.header("Configuration")
         
+        if st.sidebar.button("Show Analytics" if not st.session_state["show_analytics"] else "Back to Recruitment"):
+            st.session_state["show_analytics"] = not st.session_state["show_analytics"]
+            st.rerun()
+
         # OpenAI Configuration
         st.subheader("OpenAI Settings")
         api_key = st.text_input("OpenAI API Key", type="password", value=st.session_state.openai_api_key, help="Get your API key from platform.openai.com")
@@ -867,116 +863,128 @@ def main() -> None:
                           'Zoom Client ID': st.session_state.zoom_client_id, 'Zoom Client Secret': st.session_state.zoom_client_secret,
                           'Email Sender': st.session_state.email_sender, 'Email Password': st.session_state.email_passkey,
                           'Company Name': st.session_state.company_name}
+        
+
+    if st.session_state["show_analytics"]:
+        # Analytics Page Content
+        st.title("Analytics Dashboard")
+        st.write("Welcome to the analytics section.")
+        st.bar_chart([5, 8, 2, 6])
+        st.line_chart([1, 2, 3, 4])
+        st.area_chart([5, 3, 7, 1])
+
 
     missing_configs = [k for k, v in required_configs.items() if not v]
     if missing_configs:
         st.warning(f"Please configure the following in the sidebar: {', '.join(missing_configs)}")
         return
 
-    if not st.session_state.openai_api_key:
+    if not st.session_state.openai_api_key and  not st.session_state["show_analytics"]:
         st.warning("Please enter your OpenAI API key in the sidebar to continue.")
         return
+    
+    if not st.session_state["show_analytics"]:
+        role = st.selectbox("Select the role you're applying for:", list(final_roles.keys()))
+        with st.expander("View Required Skills", expanded=True): st.markdown(final_roles[role])
 
-    role = st.selectbox("Select the role you're applying for:", list(final_roles.keys()))
-    with st.expander("View Required Skills", expanded=True): st.markdown(final_roles[role])
+    if not st.session_state["show_analytics"]:
+        # Add a "New Application" button before the resume upload
+        if st.button("📝 New Application") :
+            # Clear only the application-related states
+            keys_to_clear = ['resume_text', 'analysis_complete', 'is_selected', 'candidate_email', 'current_pdf']
+            for key in keys_to_clear:
+                if key in st.session_state:
+                    st.session_state[key] = None if key == 'current_pdf' else ""
+            st.rerun()
 
-    # Add a "New Application" button before the resume upload
-    if st.button("📝 New Application"):
-        # Clear only the application-related states
-        keys_to_clear = ['resume_text', 'analysis_complete', 'is_selected', 'candidate_email', 'current_pdf']
-        for key in keys_to_clear:
-            if key in st.session_state:
-                st.session_state[key] = None if key == 'current_pdf' else ""
-        st.rerun()
+        resume_file = st.file_uploader("Upload your resume (PDF)", type=["pdf"], key="resume_uploader")
+        if resume_file is not None and resume_file != st.session_state.get('current_pdf') and not st.session_state["show_analytics"]:
+            st.session_state.current_pdf = resume_file
+            st.session_state.resume_text = ""
+            st.session_state.analysis_complete = False
+            st.session_state.is_selected = False
+            st.rerun()
 
-    resume_file = st.file_uploader("Upload your resume (PDF)", type=["pdf"], key="resume_uploader")
-    if resume_file is not None and resume_file != st.session_state.get('current_pdf'):
-        st.session_state.current_pdf = resume_file
-        st.session_state.resume_text = ""
-        st.session_state.analysis_complete = False
-        st.session_state.is_selected = False
-        st.rerun()
-
-    if resume_file:
-        st.subheader("Uploaded Resume")
-        col1, col2 = st.columns([4, 1])
-        
-        with col1:
-            import tempfile, os
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
-                tmp_file.write(resume_file.read())
-                tmp_file_path = tmp_file.name
-            resume_file.seek(0)
-            try: pdf_viewer(tmp_file_path)
-            finally: os.unlink(tmp_file_path)
-        
-        with col2:
-            st.download_button(label="📥 Download", data=resume_file, file_name=resume_file.name, mime="application/pdf")
-        # Process the resume text
-        if not st.session_state.resume_text:
-            with st.spinner("Processing your resume..."):
-                resume_text = extract_text_from_pdf(resume_file)
-                if resume_text:
-                    st.session_state.resume_text = resume_text
-                    st.success("Resume processed successfully!")
-                else:
-                    st.error("Could not process the PDF. Please try again.")
-
-    # Email input with session state
-    email_can = st.text_input(
-        "Candidate's email address",
-        value=st.session_state.candidate_email,
-        key="email_input"
-    )
-    if email_can :
-        st.session_state.candidate_email = email_can
-    else:
-        st.session_state.candidate_email = "setodkar06@gmail.com"
-
-    # Analysis and next steps
-    if st.session_state.resume_text and st.session_state.candidate_email and not st.session_state.analysis_complete:
-        if st.button("Analyze Resume"):
-            with st.spinner("Analyzing your resume..."):
-                
-                if True :
-                    print("DEBUG: Starting resume analysis")
-                    is_selected, feedback = analyze_resume(
-                        st.session_state.resume_text,
-                        role
-                    )
-                    print(f"DEBUG: Analysis complete - Selected: {is_selected}, Feedback: {feedback}")
-
-                    if is_selected:
-                        st.success("Congratulations! Your skills match our requirements.")
-                        st.session_state.analysis_complete = True
-                        st.session_state.is_selected = True
-                        st.rerun()
+        if resume_file  and not st.session_state["show_analytics"]:
+            st.subheader("Uploaded Resume")
+            col1, col2 = st.columns([4, 1])
+            
+            with col1:
+                import tempfile, os
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+                    tmp_file.write(resume_file.read())
+                    tmp_file_path = tmp_file.name
+                resume_file.seek(0)
+                try: pdf_viewer(tmp_file_path)
+                finally: os.unlink(tmp_file_path)
+            
+            with col2:
+                st.download_button(label="📥 Download", data=resume_file, file_name=resume_file.name, mime="application/pdf")
+            # Process the resume text
+            if not st.session_state.resume_text  and not st.session_state["show_analytics"]:
+                with st.spinner("Processing your resume..."):
+                    resume_text = extract_text_from_pdf(resume_file)
+                    if resume_text:
+                        st.session_state.resume_text = resume_text
+                        st.success("Resume processed successfully!")
                     else:
-                        st.warning("Unfortunately, your skills don't match our requirements.")
-                        st.write(f"Feedback: {feedback}")
-                        
-                        # Send rejection email
-                        with st.spinner("Sending feedback email..."):
-                            try:
-                                send_rejection_email(st.session_state.get('email_sender'),
-                                                     st.session_state.get('email_passkey'), 
-                                                     st.session_state.get('candidate_email'),
-                                                     role, 
-                                                     st.session_state.get('company_name'),
-                                                     )
-                                st.info("We've sent you an email with detailed feedback.")
-                            except Exception as e:
-                                logger.error(f"Error sending rejection email: {e}")
-                                st.error("Could not send feedback email. Please try again.")
-    if st.session_state.get('analysis_complete') and st.session_state.get('is_selected', False) and not st.session_state.get('proceed_app'):
-        st.info("Take assessment test!")
+                        st.error("Could not process the PDF. Please try again.")
+
+        # Email input with session state
+        email_can = st.text_input(
+            "Candidate's email address",
+            value=st.session_state.candidate_email,
+            key="email_input"
+        )
+        if email_can  and not st.session_state["show_analytics"]:
+            st.session_state.candidate_email = email_can
+        else:
+            st.session_state.candidate_email = "setodkar06@gmail.com"
+
+        # Analysis and next steps
+        if st.session_state.resume_text and st.session_state.candidate_email and not st.session_state.analysis_complete  and not st.session_state["show_analytics"]:
+            if st.button("Analyze Resume"):
+                with st.spinner("Analyzing your resume..."):
+                    
+                    if True :
+                        print("DEBUG: Starting resume analysis")
+                        is_selected, feedback = analyze_resume(
+                            st.session_state.resume_text,
+                            role
+                        )
+                        print(f"DEBUG: Analysis complete - Selected: {is_selected}, Feedback: {feedback}")
+
+                        if is_selected:
+                            st.success("Congratulations! Your skills match our requirements.")
+                            st.session_state.analysis_complete = True
+                            st.session_state.is_selected = True
+                            st.rerun()
+                        else:
+                            st.warning("Unfortunately, your skills don't match our requirements.")
+                            st.write(f"Feedback: {feedback}")
+                            
+                            # Send rejection email
+                            with st.spinner("Sending feedback email..."):
+                                try:
+                                    send_rejection_email(st.session_state.get('email_sender'),
+                                                        st.session_state.get('email_passkey'), 
+                                                        st.session_state.get('candidate_email'),
+                                                        role, 
+                                                        st.session_state.get('company_name'),
+                                                        )
+                                    st.info("We've sent you an email with detailed feedback.")
+                                except Exception as e:
+                                    logger.error(f"Error sending rejection email: {e}")
+                                    st.error("Could not send feedback email. Please try again.")
+    if st.session_state.get('analysis_complete') and st.session_state.get('is_selected', False) and not st.session_state.get('proceed_app')  and not st.session_state["show_analytics"]:
+        
         test_result = conduct_test_and_evaluate(role)
         
         if test_result:  # Candidate passed the test
             st.session_state.go_ahead = True
         else:  # Candidate failed the test
             st.session_state.go_ahead = False
-    if st.session_state.get('test_conducted') and not st.session_state.get('go_ahead') and st.session_state.get('is_selected', False):
+    if st.session_state.get('test_conducted') and not st.session_state.get('go_ahead') and st.session_state.get('is_selected', False)  and not st.session_state["show_analytics"]:
         st.error("You need to pass the test to proceed with the application.")
         st.info("Unfortunately we are unable to proceed.")
         with st.spinner("Sending feedback email..."):
@@ -991,7 +999,7 @@ def main() -> None:
                             except Exception as e:
                                 logger.error(f"Error sending rejection email: {e}")
                                 st.error("Could not send feedback email. Please try again.")
-    if st.session_state.get('test_conducted') and st.session_state.get('analysis_complete') and st.session_state.get('is_selected', False) and st.session_state.go_ahead and not st.session_state.get('session_to_proceed'):
+    if st.session_state.get('test_conducted') and st.session_state.get('analysis_complete') and st.session_state.get('is_selected', False) and st.session_state.go_ahead and not st.session_state.get('session_to_proceed')  and not st.session_state["show_analytics"]:
         st.success("Congratulations! You have passed the test")
         st.info("Click 'Proceed with Application' to continue with the interview process.")
         
@@ -1029,19 +1037,19 @@ def main() -> None:
                     st.error("Please try again or contact support.")
                     
 
-    if not st.session_state.get('no_button') and st.session_state.get('proceed_app'):
+    if not st.session_state.get('no_button') and st.session_state.get('proceed_app')  and not st.session_state["show_analytics"]:
         st.success("Confimation email sent successfully!")
         st.info("Schedule interview time out of given time!")
         st.session_state.time_change_requested = ask_for_time_change()
         st.session_state.check_again = True
 
-    if st.session_state.get('time_change_requested') and not st.session_state.get('time_and_date'):
+    if st.session_state.get('time_change_requested') and not st.session_state.get('time_and_date')  and not st.session_state["show_analytics"]:
         st.session_state.check_it = True
         update_meeting_schedule() 
     else:
         st.session_state.check_it = True
 
-    if st.session_state.get('check_it') and st.session_state.get('check_again') and not st.session_state.get('fragment'):
+    if st.session_state.get('check_it')  and not st.session_state["show_analytics"] and st.session_state.get('check_again') and not st.session_state.get('fragment'):
         if st.button("Proceed with Schedule", key="schedule_button"):
             st.session_state.no_button = True
             st.session_state.time_and_date = True
@@ -1060,7 +1068,7 @@ def main() -> None:
             st.session_state.fragment = True
             st.rerun()
 
-    if st.session_state.get('fragment'):
+    if st.session_state.get('fragment') and not st.session_state["show_analytics"]:
         st.success("Interview scheduled successfully! Check your email for details.")
         st.info("Interview scheduled and email sent successfully.")
         print("DEBUG: All processes completed successfully")  # Debug

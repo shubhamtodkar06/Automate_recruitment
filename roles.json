@@ -3,7 +3,6 @@
     "frontend_engineer": "\n        Required Skills:\n        - React/Vue.js/Angular\n        - HTML5, CSS3, JavaScript/TypeScript\n        - SQL\n        - Responsive design\n        - State management\n        - Frontend testing\n    ",
     "backend_engineer": "\n        Required Skills:\n        - Python/Java/Node.js\n        - REST APIs\n        - Database design and management\n        - System architecture\n        - Cloud services (AWS/GCP/Azure)\n        - Kubernetes, Docker, CI/CD\ngoogle.com\n\n    ",
     "helloworld": "helloworld\n",
-    "new_role": "role_role_new role",
-    "roles_role": "here is criteria\n\n",
-    "new_role_is": "new role"
+    "roles_role": "Enter Criteria for role",
+    "newone": "new criteria\nedit sae"
 }
