@@ -177,7 +177,7 @@ def manage_roles():
 
         # Show a dropdown of available roles from mcqs.json as suggestions
         if suggested_roles:
-            st.write("You can choose from the following roles in MCQs (excluding existing roles):")
+            st.write("Following Roles Already have MCQs(type similar spelling to access those):")
             st.write(", ".join(suggested_roles))
 
         st.write("If your role is not listed, you can type a new role name.")
@@ -194,11 +194,12 @@ def manage_roles():
                     st.rerun()  # Rerun to reflect changes immediately
             elif new_role in existing_roles_in_mcqs_keys:
                 st.warning(f"Role '{new_role}' already exists in the MCQs file. Using the existing MCQs for this role.")
-                new_criteria = st.text_area("Enter the criteria for the new role:", value="Role criteria loaded from MCQs.", height=150)
+                new_criteria = st.text_area("Enter the criteria for the new role:", value="Enter Criteria for role", height=150)
                 if st.button("Add Role"):
                     st.session_state["custom_roles"][new_role] = new_criteria
                     save_roles(st.session_state["custom_roles"])  # Save the new role immediately
                     st.success(f"New role '{new_role}' added successfully with existing MCQs.")
+                    
             else:
                 new_criteria = st.text_area("Enter the criteria for the new role:")
                 if st.button("Add Role"):
@@ -210,6 +211,7 @@ def manage_roles():
                         st.session_state["custom_roles"][new_role] = new_criteria
                         save_roles(st.session_state["custom_roles"])  # Save the new role immediately
                         st.success(f"New role '{new_role}' added successfully.")
+                        st.rerun()  # Rerun to reflect changes immediately
     else:
         st.markdown(f"### Current Criteria for {role_choice}:")
         st.text_area("", value=st.session_state["custom_roles"][role_choice], height=150, disabled=True)
@@ -226,6 +228,7 @@ def manage_roles():
                 st.session_state["custom_roles"][role_choice] = new_criteria
                 save_roles(st.session_state["custom_roles"])  # Save the change immediately
                 st.success(f"Criteria for '{role_choice}' updated successfully.")
+                st.rerun()  # Rerun to reflect changes immediately
 
         if st.button("Delete Role"):
             del st.session_state["custom_roles"][role_choice]
@@ -331,6 +334,15 @@ def add_mcq_question(role_choice):
             # Save the updated MCQs back to the file
             save_mcqs(role_choice, role_mcqs)
             st.success(f"MCQ added for role '{role_choice}' successfully!")
+
+            # Clear the input fields by resetting their session state values
+            st.session_state[f"new_question_{role_choice}"] = ""
+            st.session_state[f"option_1_{role_choice}"] = ""
+            st.session_state[f"option_2_{role_choice}"] = ""
+            st.session_state[f"option_3_{role_choice}"] = ""
+            st.session_state[f"option_4_{role_choice}"] = ""
+            st.session_state[f"correct_option_{role_choice}"] = "Option 1"  # Reset to default value
+
             st.rerun()  # Rerun to reflect changes immediately
 
 def schedule_meeting():
@@ -365,8 +377,8 @@ def init_session_state() -> None:
         'candidate_email': "", 'openai_api_key': "", 'recruiter_email': "" ,'resume_text': "", 'analysis_complete': False,
         'is_selected': False, 'zoom_account_id': "", 'zoom_client_id': "", 'zoom_client_secret': "",
         'email_sender': "", 'email_passkey': "", 'company_name': "", 'current_pdf': None,
-        'time_change_requested': False, 'scheduled_datetime': None, 'proceed_app' : False,
-        'check_it' : False, 'no_button' : False, 'time_and_date' : False, 'check_again' : False, 'fragment' : False
+        'time_change_requested': False, 'scheduled_datetime': None, 'proceed_app' : False, 'test_conducted' : False,
+        'check_it' : False, 'no_button' : False, 'time_and_date' : False, 'check_again' : False, 'fragment' : False, 'go_ahead' : False, 'session_to_proceed' : False
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -660,6 +672,81 @@ def update_meeting_schedule():
             f"{st.session_state['scheduled_datetime'].strftime('%Y-%m-%d %H:%M:%S')}"
         )
 
+def conduct_test_and_evaluate(role_choice):
+    """Conducts the assessment test for the candidate and returns True if passed, False otherwise."""
+    # Load MCQs for the selected role
+    role_mcqs = load_mcqs(role_choice)
+    if not role_mcqs:
+        st.error("No MCQs available for this role.")
+        return True
+
+    # Initialize session state variables for the test
+    test_state_key = f"{role_choice}_test_state"
+    if test_state_key not in st.session_state:
+        st.session_state[test_state_key] = {
+            "progress": 0,
+            "answers": [],
+            "completed": False
+        }
+
+    test_state = st.session_state[test_state_key]
+    progress = test_state["progress"]
+
+    if not test_state["completed"]:
+        # Get the current question
+        current_question = role_mcqs[progress]
+
+        # Display the question
+        st.write(f"Question {progress + 1}: {current_question['question']}")
+        selected_option = st.radio(
+            label="Choose your answer:",
+            options=current_question['options'],
+            key=f"{role_choice}_test_question_{progress}"  # Unique key for each question
+        )
+
+        # Button to submit the current answer
+        if st.button("Submit Answer", key=f"{role_choice}_submit_button_{progress}"):
+            if not selected_option:
+                st.warning("Please select an answer before proceeding.")
+            else:
+                # Record the selected answer
+                test_state["answers"].append(selected_option)
+
+                # Move to the next question or complete the test
+                if progress + 1 < len(role_mcqs):
+                    test_state["progress"] += 1
+                    st.rerun()
+                else:
+                    # Test completed
+                    test_state["completed"] = True
+                    st.rerun()
+
+    # After all questions are answered, evaluate the result
+    if test_state["completed"]:
+        correct_answers = 0
+        candidate_answers = test_state["answers"]
+
+        # Calculate the score
+        for i, mcq in enumerate(role_mcqs):
+            if mcq["answer"] == candidate_answers[i]:
+                correct_answers += 1
+
+        total_questions = len(role_mcqs)
+        passing_score = 0.7  # 70%
+        score_percentage = (correct_answers / total_questions) * 100
+
+        # Display the result
+        st.write(f"Test completed! You answered {correct_answers} out of {total_questions} questions correctly.")
+        st.write(f"Your score: {score_percentage:.2f}%")
+
+        st.session_state.test_conducted = True
+        if score_percentage >= (passing_score * 100):
+            st.success("You have passed the test!")
+            return True
+        else:
+            st.error("You did not pass the test.")
+            return False
+
 
 def main() -> None:
     st.title("AI Recruitment System")
@@ -754,7 +841,7 @@ def main() -> None:
                     st.success(f"Slot {new_slot} added successfully!")
                 else:
                     st.warning("This slot already exists.")
-
+                st.rerun
         # Remove an existing slot
         with st.form("remove_slot_form"):
             st.write("Remove an Existing Slot")
@@ -765,6 +852,7 @@ def main() -> None:
                 if remove_slot and slot_to_remove:
                     st.session_state.available_times.remove(slot_to_remove)
                     st.success(f"Slot {slot_to_remove} removed successfully!")
+                    st.rerun()
             else:
                 st.info("No available slots to remove.")
 
@@ -880,9 +968,31 @@ def main() -> None:
                             except Exception as e:
                                 logger.error(f"Error sending rejection email: {e}")
                                 st.error("Could not send feedback email. Please try again.")
-
     if st.session_state.get('analysis_complete') and st.session_state.get('is_selected', False) and not st.session_state.get('proceed_app'):
-        st.success("Congratulations! Your skills match our requirements.")
+        st.info("Take assessment test!")
+        test_result = conduct_test_and_evaluate(role)
+        
+        if test_result:  # Candidate passed the test
+            st.session_state.go_ahead = True
+        else:  # Candidate failed the test
+            st.session_state.go_ahead = False
+    if st.session_state.get('test_conducted') and not st.session_state.get('go_ahead') and st.session_state.get('is_selected', False):
+        st.error("You need to pass the test to proceed with the application.")
+        st.info("Unfortunately we are unable to proceed.")
+        with st.spinner("Sending feedback email..."):
+                            try:
+                                send_rejection_email(st.session_state.get('email_sender'),
+                                                     st.session_state.get('email_passkey'), 
+                                                     st.session_state.get('candidate_email'),
+                                                     role, 
+                                                     st.session_state.get('company_name'),
+                                                     )
+                                st.info("We've sent you an email with detailed feedback.")
+                            except Exception as e:
+                                logger.error(f"Error sending rejection email: {e}")
+                                st.error("Could not send feedback email. Please try again.")
+    if st.session_state.get('test_conducted') and st.session_state.get('analysis_complete') and st.session_state.get('is_selected', False) and st.session_state.go_ahead and not st.session_state.get('session_to_proceed'):
+        st.success("Congratulations! You have passed the test")
         st.info("Click 'Proceed with Application' to continue with the interview process.")
         
         if st.button("Proceed with Application", key="proceed_button"):
@@ -901,6 +1011,7 @@ def main() -> None:
                         print("DEBUG: Email sent successfully")  # Debug
                         status.update(label="✅ Confirmation email sent!")
 
+                    st.session_state.session_to_proceed = True
                     st.session_state.proceed_app = True
                     
                     # 4. Schedule interview
@@ -930,7 +1041,6 @@ def main() -> None:
     else:
         st.session_state.check_it = True
 
-
     if st.session_state.get('check_it') and st.session_state.get('check_again') and not st.session_state.get('fragment'):
         if st.button("Proceed with Schedule", key="schedule_button"):
             st.session_state.no_button = True
@@ -953,7 +1063,6 @@ def main() -> None:
     if st.session_state.get('fragment'):
         st.success("Interview scheduled successfully! Check your email for details.")
         st.info("Interview scheduled and email sent successfully.")
-        st.info("Take assessment test!")
         print("DEBUG: All processes completed successfully")  # Debug
         st.success("""
             🎉 Application Successfully Processed!

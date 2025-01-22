@@ -58,9 +58,9 @@
                 "Backend development",
                 "Frontend development",
                 "Mobile app development",
-                "Database management"
+                "Database management like SQL"
             ],
-            "answer": "Frontend development"
+            "answer": "Backend development"
         },
         {
             "question": "Which CSS property is used to change text color?",
@@ -257,6 +257,38 @@
                 "4"
             ],
             "correct_option": "Option 3"
+        }
+    ],
+    "new_role": [
+        {
+            "question": "we are adding mcq question",
+            "options": [
+                "1",
+                "2",
+                "3",
+                "4"
+            ],
+            "answer": "Option 3"
+        },
+        {
+            "question": "another mcq question",
+            "options": [
+                "one",
+                "twoo",
+                "three",
+                "four"
+            ],
+            "answer": "Option 2"
+        },
+        {
+            "question": "another mcq question",
+            "options": [
+                "one",
+                "twoo",
+                "three",
+                "four"
+            ],
+            "answer": "Option 2"
         }
     ]
 }
