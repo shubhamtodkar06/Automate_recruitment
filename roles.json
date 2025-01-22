@@ -1,6 +1,7 @@
 {
     "ai_ml_engineer": "\n        Required Skills:\n        - Python, PyTorch/TensorFlow\n        - Machine Learning algorithms and frameworks\n        - Deep Learning and Neural Networks\n        - Data preprocessing and analysis\n        - MLOps and model deployment\n        - RAG, LLM, Finetuning and Prompt Engineering\n    ",
     "frontend_engineer": "\n        Required Skills:\n        - React/Vue.js/Angular\n        - HTML5, CSS3, JavaScript/TypeScript\n        - Responsive design\n        - State management\n        - Frontend testing\n    ",
-    "backend_engineer": "\n        Required Skills:\n        - Python/Java/Node.js/C++\n        - REST APIs\n        - Database design and management\n        - System architecture\n        - Cloud services (AWS/GCP/Azure)\n        - Kubernetes, Docker, CI/CD\n    ",
-    "helloworld": "world must say hello back\n"
+    "backend_engineer": "\n        Required Skills:\n        - Python/Java/Node.js\n        - REST APIs\n        - Database design and management\n        - System architecture\n        - Cloud services (AWS/GCP/Azure)\n        - Kubernetes, Docker, CI/CD\n    ",
+    "helloworld": "helloworld\n",
+    "new_role": "role_role_new role"
 }

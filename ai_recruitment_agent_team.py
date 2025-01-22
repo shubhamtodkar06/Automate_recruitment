@@ -111,48 +111,109 @@ def save_roles(roles):
     with open(FILE_PATH, "w") as file:
         json.dump(roles, file, indent=4)
 
+def load_mcqs(role_choice=""):
+    """Load MCQs for the selected role or all roles from the JSON file."""
+    try:
+        with open("mcqs.json", "r") as file:
+            mcqs_data = json.load(file)
+            if role_choice:
+                return mcqs_data.get(role_choice, [])  # Return MCQs for specific role
+            return mcqs_data if isinstance(mcqs_data, dict) else {}  # Return all roles as a dictionary
+    except FileNotFoundError:
+        return {}  # Return empty dictionary if file is not found
+
+
+def load_all_mcqs_roles():
+    """Load all roles from the MCQs file."""
+    try:
+        with open("mcqs.json", "r") as file:
+            mcqs_data = json.load(file)
+            return list(mcqs_data.keys())  # Get all role names from MCQs
+    except FileNotFoundError:
+        return []
+def save_mcqs(role_choice, role_mcqs):
+    """Save MCQs for the selected role to the JSON file."""
+    try:
+        with open("mcqs.json", "r") as file:
+            mcqs_data = json.load(file)
+    except FileNotFoundError:
+        mcqs_data = {}
+
+    mcqs_data[role_choice] = role_mcqs
+
+    with open("mcqs.json", "w") as file:
+        json.dump(mcqs_data, file, indent=4)
+
 def manage_roles():
     """Manage roles by allowing add, edit, or delete functionality."""
-    
-    # Load roles (either from file or default if empty)
     roles = load_roles()
-    
-    # If roles file is empty, add the default roles
+
     if not roles:
         roles = ROLE_REQUIREMENTS.copy()
-        save_roles(roles)  # Save default roles immediately if the file was empty
+        save_roles(roles)
 
     if "custom_roles" not in st.session_state:
         st.session_state["custom_roles"] = roles
 
     st.sidebar.subheader("Modify or Add Role Criteria")
 
-    # Select or add a role
     role_choice = st.selectbox(
         "Select a role to modify or add:",
         list(st.session_state["custom_roles"].keys()) + ["Add New Role"]
     )
 
     if role_choice == "Add New Role":
-        # Adding new role
+        # Get existing roles from mcqs.json to display as suggestions
+        existing_roles_in_mcqs = load_mcqs()  # Now it returns a dictionary
+        existing_roles_in_mcqs_keys = list(existing_roles_in_mcqs.keys())  # Get all keys (role names)
+
+        # Get the roles already present in roles.json
+        existing_roles_in_json = list(st.session_state["custom_roles"].keys())
+
+        # Exclude roles already in roles.json from suggestions
+        suggested_roles = [role for role in existing_roles_in_mcqs_keys if role not in existing_roles_in_json]
+
         new_role = st.text_input("Enter the name of the new role:")
+
+        # Show a dropdown of available roles from mcqs.json as suggestions
+        if suggested_roles:
+            st.write("You can choose from the following roles in MCQs (excluding existing roles):")
+            st.write(", ".join(suggested_roles))
+
+        st.write("If your role is not listed, you can type a new role name.")
+
         if new_role:
-            new_criteria = st.text_area("Enter the criteria for the new role:")
-            if st.button("Add Role"):
-                if new_role.strip() == "":
-                    st.error("Role name cannot be empty.")
-                elif not new_criteria.strip():
-                    st.error("Please provide criteria for the new role.")
-                else:
+            # Check if the role already exists in roles.json
+            if new_role in existing_roles_in_json:
+                st.warning(f"Role '{new_role}' already exists in the roles file. Please choose another name or modify the existing role.")
+                new_criteria = st.text_area("Enter the criteria for the new role:")
+                if st.button("Add Role"):
                     st.session_state["custom_roles"][new_role] = new_criteria
                     save_roles(st.session_state["custom_roles"])  # Save the new role immediately
                     st.success(f"New role '{new_role}' added successfully.")
+                    st.rerun()  # Rerun to reflect changes immediately
+            elif new_role in existing_roles_in_mcqs_keys:
+                st.warning(f"Role '{new_role}' already exists in the MCQs file. Using the existing MCQs for this role.")
+                new_criteria = st.text_area("Enter the criteria for the new role:", value="Role criteria loaded from MCQs.", height=150)
+                if st.button("Add Role"):
+                    st.session_state["custom_roles"][new_role] = new_criteria
+                    save_roles(st.session_state["custom_roles"])  # Save the new role immediately
+                    st.success(f"New role '{new_role}' added successfully with existing MCQs.")
+            else:
+                new_criteria = st.text_area("Enter the criteria for the new role:")
+                if st.button("Add Role"):
+                    if new_role.strip() == "":
+                        st.error("Role name cannot be empty.")
+                    elif not new_criteria.strip():
+                        st.error("Please provide criteria for the new role.")
+                    else:
+                        st.session_state["custom_roles"][new_role] = new_criteria
+                        save_roles(st.session_state["custom_roles"])  # Save the new role immediately
+                        st.success(f"New role '{new_role}' added successfully.")
     else:
-        # Modifying or deleting an existing role
         st.markdown(f"### Current Criteria for {role_choice}:")
         st.text_area("", value=st.session_state["custom_roles"][role_choice], height=150, disabled=True)
 
-        # Allow modifications for editable roles
         new_criteria = st.text_area(
             f"Modify the criteria for {role_choice}:",
             value=st.session_state["custom_roles"][role_choice]
@@ -166,19 +227,111 @@ def manage_roles():
                 save_roles(st.session_state["custom_roles"])  # Save the change immediately
                 st.success(f"Criteria for '{role_choice}' updated successfully.")
 
-        # Option to delete the role
         if st.button("Delete Role"):
             del st.session_state["custom_roles"][role_choice]
             save_roles(st.session_state["custom_roles"])  # Save after deletion
             st.success(f"Role '{role_choice}' deleted successfully.")
+            st.rerun()  # Rerun to reflect changes immediately
+            # Optionally remove MCQs if needed:
+            st.warning(f"Role '{role_choice}' is deleted but its MCQs are kept in the system.")
+            
+            st.rerun()
 
-    # Check if roles file is empty again and add default roles if needed
+        if role_choice != "Add New Role":
+            edit_mcq_questions(role_choice)
+            add_mcq_question(role_choice)
+
     if not st.session_state["custom_roles"]:
         st.session_state["custom_roles"] = ROLE_REQUIREMENTS.copy()
         save_roles(st.session_state["custom_roles"])
 
     return st.session_state["custom_roles"]
 
+def edit_mcq_questions(role_choice):
+    """Edit MCQs for the selected role."""
+    role_mcqs = load_mcqs(role_choice)
+    
+    # Display the existing MCQs
+    st.subheader(f"Existing MCQs for {role_choice}")
+    
+    if not role_mcqs:
+        st.write("No questions found for this role.")
+    
+    for idx, question in enumerate(role_mcqs):
+        st.markdown(f"### Question {idx + 1}")
+        st.write(f"**Q:** {question['question']}")
+        st.write(f"**Options:** {', '.join(question['options'])}")
+        
+        # Ensure the 'answer' key exists, if not, assign a default value
+        answer = question.get('answer', 'No answer set')
+        st.write(f"**Answer:** {answer}")
+        
+        # Option to edit the question
+        with st.expander(f"Edit Question {idx + 1}"):
+
+            new_question = st.text_input(f"Edit Question {idx + 1}: ", value=question['question'], key=f"question_{idx}")
+            new_options = [st.text_input(f"Option {i + 1}: ", value=opt, key=f"option_{idx}_{i}") for i, opt in enumerate(question['options'])]
+            new_answer = st.selectbox(f"Select Correct Answer for Question {idx + 1}", new_options, key=f"answer_{idx}")
+            
+            if st.button(f"Save Changes to Question {idx + 1}", key=f"save_{idx}"):
+                if new_question.strip() == "" or not new_options or new_answer.strip() == "":
+                    st.error("Please fill in all fields correctly.")
+                else:
+                    # Update the question with new data
+                    role_mcqs[idx] = {"question": new_question, "options": new_options, "answer": new_answer}
+                    save_mcqs(role_choice, role_mcqs)  # Save changes to file
+                    st.success(f"Question {idx + 1} updated successfully.")
+                    st.rerun()  # Rerun to reflect changes immediately
+        
+            # Button to delete the specific MCQ
+            if st.button(f"Delete Question {idx + 1}", key=f"delete_{idx}"):
+                role_mcqs.pop(idx)  # Remove the MCQ at the specified index
+                save_mcqs(role_choice, role_mcqs)  # Save the updated list to file
+                st.success(f"Question {idx + 1} deleted successfully.")
+                st.rerun()  # Rerun to reflect changes immediately
+
+def add_mcq_question(role_choice):
+    """Add a new MCQ question for the selected role."""
+    st.sidebar.subheader(f"Add New MCQ for {role_choice}")
+    
+    # Ensure that all four options are filled before proceeding
+    new_question = st.text_input("Enter the new question:", key=f"new_question_{role_choice}")
+    
+    # MCQ options
+    option_1 = st.text_input("Option 1:", key=f"option_1_{role_choice}")
+    option_2 = st.text_input("Option 2:", key=f"option_2_{role_choice}")
+    option_3 = st.text_input("Option 3:", key=f"option_3_{role_choice}")
+    option_4 = st.text_input("Option 4:", key=f"option_4_{role_choice}")
+
+    # Correct option
+    correct_option = st.selectbox(
+        "Select the correct option:",
+        ["Option 1", "Option 2", "Option 3", "Option 4"],
+        key=f"correct_option_{role_choice}"
+    )
+
+    # Validate that all fields are filled
+    if st.button("Add MCQ"):
+        if not new_question or not option_1 or not option_2 or not option_3 or not option_4:
+            st.error("Please fill in all fields before adding the MCQ.")
+        else:
+            # Create the MCQ question object
+            mcq_question = {
+                "question": new_question,
+                "options": [option_1, option_2, option_3, option_4],
+                "answer": correct_option  # Fix the key from "correct_option" to "answer"
+            }
+
+            # Load existing MCQs for the role
+            role_mcqs = load_mcqs(role_choice)
+            
+            # Add the new question to the list of MCQs for the role
+            role_mcqs.append(mcq_question)
+
+            # Save the updated MCQs back to the file
+            save_mcqs(role_choice, role_mcqs)
+            st.success(f"MCQ added for role '{role_choice}' successfully!")
+            st.rerun()  # Rerun to reflect changes immediately
 
 def schedule_meeting():
     """

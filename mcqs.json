@@ -1,0 +1,262 @@
+{
+    "ai_ml_engineer": [
+        {
+            "question": "Which of these is a popular library for machine learning?",
+            "options": [
+                "NumPy",
+                "PyTorch",
+                "Pandas",
+                "TensorFlow"
+            ],
+            "answer": "PyTorch"
+        },
+        {
+            "question": "Which algorithm is used for classification problems?",
+            "options": [
+                "K-Means",
+                "Linear Regression",
+                "Decision Tree",
+                "Random Forest"
+            ],
+            "answer": "Decision Tree"
+        },
+        {
+            "question": "What is overfitting in machine learning?",
+            "options": [
+                "Model performs well on training data but poorly on test data",
+                "Model performs well on both training and test data",
+                "Model performs poorly on both training and test data",
+                "Model performs poorly on training data but well on test data"
+            ],
+            "answer": "Model performs well on training data but poorly on test data"
+        },
+        {
+            "question": "Which of the following is a supervised learning algorithm?",
+            "options": [
+                "K-Means",
+                "SVM",
+                "Apriori",
+                "DBSCAN"
+            ],
+            "answer": "SVM"
+        },
+        {
+            "question": "What is the purpose of cross-validation?",
+            "options": [
+                "To reduce the dimensionality of data",
+                "To evaluate the performance of a model",
+                "To increase the size of the training set",
+                "To improve the accuracy of the model"
+            ],
+            "answer": "To evaluate the performance of a model"
+        }
+    ],
+    "frontend_engineer": [
+        {
+            "question": "What is the primary purpose of React?",
+            "options": [
+                "Backend development",
+                "Frontend development",
+                "Mobile app development",
+                "Database management"
+            ],
+            "answer": "Frontend development"
+        },
+        {
+            "question": "Which CSS property is used to change text color?",
+            "options": [
+                "font-color",
+                "text-color",
+                "color",
+                "text-style"
+            ],
+            "answer": "color"
+        },
+        {
+            "question": "What does HTML stand for?",
+            "options": [
+                "HyperText Markup Language",
+                "HyperText Machine Language",
+                "HyperText and links Markup Language",
+                "HyperText Markup Links"
+            ],
+            "answer": "HyperText Markup Language"
+        },
+        {
+            "question": "Which JavaScript framework is maintained by Google?",
+            "options": [
+                "React",
+                "Vue",
+                "Angular",
+                "Ember"
+            ],
+            "answer": "Angular"
+        },
+        {
+            "question": "What is the purpose of the CSS box model?",
+            "options": [
+                "To define the layout of elements",
+                "To style text",
+                "To create animations",
+                "To manage media queries"
+            ],
+            "answer": "To define the layout of elements"
+        },
+        {
+            "question": "Which HTML tag is used to create a hyperlink?",
+            "options": [
+                "<link>",
+                "<a>",
+                "<href>",
+                "<url>"
+            ],
+            "answer": "<a>"
+        }
+    ],
+    "backend_engineer": [
+        {
+            "question": "What does REST stand for?",
+            "options": [
+                "Representational State Transfer",
+                "Remote Service Transfer",
+                "Randomized State Testing",
+                "Real-time State Transfer"
+            ],
+            "answer": "Representational State Transfer"
+        },
+        {
+            "question": "Which database is NoSQL?",
+            "options": [
+                "PostgreSQL",
+                "MongoDB",
+                "MySQL",
+                "SQLite"
+            ],
+            "answer": "MongoDB"
+        },
+        {
+            "question": "Which of the following is a backend programming language?",
+            "options": [
+                "HTML",
+                "CSS",
+                "Python",
+                "JavaScript"
+            ],
+            "answer": "Python"
+        },
+        {
+            "question": "What is the purpose of an API?",
+            "options": [
+                "To define the structure of a web page",
+                "To style a web page",
+                "To allow different software applications to communicate",
+                "To manage databases"
+            ],
+            "answer": "To allow different software applications to communicate"
+        },
+        {
+            "question": "Which of the following is a popular backend framework for Node.js?",
+            "options": [
+                "Django",
+                "Flask",
+                "Express",
+                "Spring"
+            ],
+            "answer": "Express"
+        },
+        {
+            "question": "What is the primary function of a database index?",
+            "options": [
+                "To store data",
+                "To improve query performance",
+                "To enforce data integrity",
+                "To manage transactions"
+            ],
+            "answer": "To improve query performance"
+        }
+    ],
+    "helloworld": [
+        {
+            "question": "What is the output of `print('Hello World!')` in Python?",
+            "options": [
+                "Hello World!",
+                "hello world",
+                "Error",
+                "None"
+            ],
+            "answer": "Hello World!"
+        },
+        {
+            "question": "What is the output of `console.log('Hello World!')` in JavaScript?",
+            "options": [
+                "Hello World!",
+                "hello world",
+                "Error",
+                "undefined"
+            ],
+            "answer": "Hello World!"
+        },
+        {
+            "question": "What is the output of `System.out.println('Hello World!')` in Java?",
+            "options": [
+                "Hello World!",
+                "hello world",
+                "Error",
+                "null"
+            ],
+            "answer": "Hello World!"
+        },
+        {
+            "question": "What is the output of `echo 'Hello World!'` in PHP?",
+            "options": [
+                "Hello World!",
+                "hello world",
+                "Error",
+                "null"
+            ],
+            "answer": "Hello World!"
+        },
+        {
+            "question": "What is hello world?",
+            "options": [
+                "my first code.",
+                "phrase",
+                "line to test code",
+                "asking world to say hello"
+            ],
+            "answer": "phrase"
+        },
+        {
+            "question": "helloworld",
+            "options": [
+                "1",
+                "2",
+                "3",
+                "4"
+            ],
+            "answer": "Option 3"
+        }
+    ],
+    "roles_role": [
+        {
+            "question": "mcq_mcq",
+            "options": [
+                "1",
+                "2",
+                "3",
+                "4"
+            ],
+            "correct_option": "Option 3"
+        },
+        {
+            "question": "mcq_mcq",
+            "options": [
+                "1",
+                "2",
+                "3",
+                "4"
+            ],
+            "correct_option": "Option 3"
+        }
+    ]
+}
