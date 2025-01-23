@@ -1,0 +1,35 @@
+{
+    "roles": {
+        "Ai Ml Engineer": {
+            "total_applicants": 0,
+            "selected_for_test": 0,
+            "passed": 0,
+            "failed": 0
+        },
+        "Frontend Engineer": {
+            "total_applicants": 0,
+            "selected_for_test": 0,
+            "passed": 0,
+            "failed": 0
+        },
+        "Backend Engineer": {
+            "total_applicants": 0,
+            "selected_for_test": 0,
+            "passed": 0,
+            "failed": 0
+        },
+        "Helloworld": {
+            "total_applicants": 0,
+            "selected_for_test": 0,
+            "passed": 0,
+            "failed": 0
+        },
+        "ai_ml_engineer": {
+            "total_applicants": 7,
+            "selected_for_test": 7,
+            "passed": 0,
+            "failed": 7
+        }
+    },
+    "interviews": []
+}

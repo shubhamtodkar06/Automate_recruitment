@@ -844,6 +844,40 @@ def conduct_test_and_evaluate(role_choice):
             st.error("You did not pass the test.")
             return False
 
+def update_analytics(role, test_result):
+    """
+    Updates the analytics.json file based on the test result.
+
+    Args:
+        role (str): The role of the candidate.
+        test_result (bool): True if the candidate passed the test, False otherwise.
+    """
+    try:
+        with open('analytics.json', 'r') as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        data = {"roles": {}, "interviews": []}
+
+    # Ensure the role exists in the data
+    if role not in data["roles"]:
+        data["roles"][role] = {"total_applicants": 0, "selected_for_test": 0, "passed": 0, "failed": 0}
+
+    # Increment selected_for_test
+    data["roles"][role]["selected_for_test"] += 1
+
+    # Increment passed or failed count based on the test result
+    if test_result:
+        data["roles"][role]["passed"] += 1
+    else:
+        data["roles"][role]["failed"] += 1
+
+    # Write the updated data back to the analytics.json file
+    with open('analytics.json', 'w') as f:
+        json.dump(data, f, indent=4)
+
+# Example usage:
+# update_analytics("AI/ML Engineer", True)
+
 
 def main() -> None:
     st.title("AI Recruitment System")
@@ -994,20 +1028,13 @@ def main() -> None:
             # Clear only the application-related states
             keys_to_clear = ['resume_text', 'analysis_complete', 'is_selected', 'candidate_email', 'current_pdf']
             for key in keys_to_clear:
-                if key in st.session_state:
-                    st.session_state[key] = None if key == 'current_pdf' else ""
-            st.session_state.fragment = False
-            st.session_state.check_it = False
-            st.session_state.analysis_complete = False
-            st.session_state.is_selected = False
-            st.session_state.proceed_app = False
-            st.session_state.test_conducted = False
-            st.session_state.time_change_requested = False
-            st.session_state.go_ahead = False
-            st.session_state.session_to_proceed = False
-            st.session_state.check_again = False
-            st.session_state.no_button = False
-            st.session_state.time_and_date = False
+                st.session_state[key] = None if key == 'current_pdf' else ""
+
+            # Reset session state flags
+            reset_flags = ['fragment', 'check_it', 'analysis_complete', 'is_selected', 'proceed_app', 'test_conducted', 
+                        'time_change_requested', 'go_ahead', 'session_to_proceed', 'check_again', 'no_button', 'time_and_date']
+            for flag in reset_flags:
+                st.session_state[flag] = False
             st.rerun()
 
         resume_file = st.file_uploader("Upload your resume (PDF)", type=["pdf"], key="resume_uploader")
@@ -1067,7 +1094,10 @@ def main() -> None:
                     # Update total applicants for the role in analytics.json
                     try:
                         with open('analytics.json', 'r') as f:
-                            data = json.load(f)
+                            try:
+                                data = json.load(f)
+                            except json.JSONDecodeError:
+                                data = {"roles": {}, "interviews": []}
                     except FileNotFoundError:
                         data = {"roles": {}, "interviews": []}
 
@@ -1087,7 +1117,7 @@ def main() -> None:
                     else:
                         st.warning("Unfortunately, your skills don't match our requirements.")
                         st.write(f"Feedback: {feedback}")
-                        
+                                
                         # Send rejection email
                         with st.spinner("Sending feedback email..."):
                             try:
@@ -1095,8 +1125,7 @@ def main() -> None:
                                                     st.session_state.get('email_passkey'), 
                                                     st.session_state.get('candidate_email'),
                                                     role, 
-                                                    st.session_state.get('company_name'),
-                                                    )
+                                                    st.session_state.get('company_name'))
                                 st.info("We've sent you an email with detailed feedback.")
                             except Exception as e:
                                 logger.error(f"Error sending rejection email: {e}")
@@ -1104,39 +1133,16 @@ def main() -> None:
 
 
 
-
     if st.session_state.get('analysis_complete') and st.session_state.get('is_selected', False) and not st.session_state.get('proceed_app') and not st.session_state["show_analytics"]:
         test_result = conduct_test_and_evaluate(role)
-        
-        # Read the existing analytics.json file
-        try:
-            with open('analytics.json', 'r') as f:
-                data = json.load(f)
-        except FileNotFoundError:
-            data = {"roles": {}, "interviews": []}
 
-        # Ensure role exists in data, if not initialize it
-        if role not in data["roles"]:
-            data["roles"][role] = {"total_applicants": 0, "selected_for_test": 0, "passed": 0, "failed": 0}
-
-        # Increment selected_for_test
-        data["roles"][role]["selected_for_test"] += 1
-
-        # Increment passed or failed count based on the test result
         if test_result:
-            st.session_state.go_ahead = True
-            data["roles"][role]["passed"] += 1
+            st.session_state.go_ahead = True    
         else:
             st.session_state.go_ahead = False
-            data["roles"][role]["failed"] += 1
-
-        # Write the updated data back to the analytics.json file
-        with open('analytics.json', 'w') as f:
-            json.dump(data, f, indent=4)
-
-
             
     if st.session_state.get('test_conducted') and not st.session_state.get('go_ahead') and st.session_state.get('is_selected', False)  and not st.session_state["show_analytics"]:
+        update_analytics(role, st.session_state.get('go_ahead'))
         st.error("You need to pass the test to proceed with the application.")
         st.info("Unfortunately we are unable to proceed.")
         with st.spinner("Sending feedback email..."):
@@ -1147,11 +1153,26 @@ def main() -> None:
                                                      role, 
                                                      st.session_state.get('company_name'),
                                                      )
+                                test_state_key = f"{role}_test_state"
+                                if test_state_key in st.session_state:
+                                        st.session_state[test_state_key] = {
+                                            "progress": 0,
+                                            "answers": [],
+                                            "completed": False
+                                        }
                                 st.info("We've sent you an email with detailed feedback.")
                             except Exception as e:
                                 logger.error(f"Error sending rejection email: {e}")
                                 st.error("Could not send feedback email. Please try again.")
     if st.session_state.get('test_conducted') and st.session_state.get('analysis_complete') and st.session_state.get('is_selected', False) and st.session_state.go_ahead and not st.session_state.get('session_to_proceed')  and not st.session_state["show_analytics"]:
+        update_analytics(role, st.session_state.get('go_ahead'))
+        test_state_key = f"{role}_test_state"
+        if test_state_key in st.session_state:
+                st.session_state[test_state_key] = {
+                    "progress": 0,
+                    "answers": [],
+                    "completed": False
+                }
         st.success("Congratulations! You have passed the test")
         st.info("Click 'Proceed with Application' to continue with the interview process.")
         
