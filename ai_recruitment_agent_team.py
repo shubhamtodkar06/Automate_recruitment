@@ -980,9 +980,9 @@ def main() -> None:
                     st.warning("This slot already exists.")
                 
         # Remove an existing slot
-        with st.form("remove_slot_form"):
+        if st.session_state.available_times:
             st.write("Remove an Existing Slot")
-            if st.session_state.available_times:
+            with st.form("remove_slot_form"):
                 slot_to_remove = st.selectbox("Select Slot to Remove:", options=st.session_state.available_times, key="remove_slot")
                 remove_slot = st.form_submit_button("Remove Slot")
 
@@ -990,8 +990,8 @@ def main() -> None:
                     st.session_state.available_times.remove(slot_to_remove)
                     st.rerun()
                     st.success(f"Slot {slot_to_remove} removed successfully!")
-            else:
-                st.info("No available slots to remove.")
+        else:
+            st.info("Add time slots for self-scheduling.")
 
         # Save updated slots to the JSON file
         with open(predefined_times_path, "w") as file:
