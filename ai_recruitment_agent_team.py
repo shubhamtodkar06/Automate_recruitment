@@ -4,28 +4,19 @@ import smtplib
 import requests
 import PyPDF2
 from datetime import datetime, timedelta
-from typing import Literal, Tuple
-from datetime import datetime, timedelta
-from email.mime.text import MIMEText
-import requests
-import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from datetime import datetime, timedelta
 import logging
 import streamlit as st
 import json
 import os
 import pytz
-import logging
-import json
 import pandas as pd
-import streamlit as st
 import matplotlib.pyplot as plt
-import streamlit as st
 from phi.tools.zoom import ZoomTool
 from phi.utils.log import logger
 from streamlit_pdf_viewer import pdf_viewer
+
 
 def display_analytics():
     # Load data from analytics.json
@@ -41,19 +32,28 @@ def display_analytics():
 
     # Extract role-based data
     role_data = analytics_data.get("roles", {})
+    
+    if not role_data:  # Check if role_data is empty
+        st.warning("No role data available.")
+        return
+    
     role_df = pd.DataFrame(role_data).T  # Transpose to make roles rows instead of columns
     role_df.reset_index(inplace=True)
     role_df.rename(columns={"index": "Role"}, inplace=True)
 
-    # Display role-based table
+    # Display role-based table with custom styling
     st.subheader("Role-Based Analytics")
-    st.table(role_df)
+    st.markdown("<style>table {background-color: #f0f8ff;}</style>", unsafe_allow_html=True)
+    st.table(role_df.style.set_table_styles([ 
+        {'selector': 'thead th', 'props': [('background-color', '#4CAF50'), ('color', 'white')]}, 
+        {'selector': 'tbody td', 'props': [('background-color', '#f9f9f9'), ('color', 'black')]}, 
+    ]))
 
     # Plot role-based bar graph
     st.subheader("Role-Based Bar Graph")
     fig, ax = plt.subplots(figsize=(10, 6))
     role_df.set_index("Role")[["total_applicants", "selected_for_test", "passed", "failed"]].plot(
-        kind="bar", ax=ax
+        kind="bar", ax=ax, color=["#ff9999", "#66b3ff", "#99ff99", "#ffcc99"]
     )
     plt.title("Applicants Breakdown by Role", fontsize=14)
     plt.xlabel("Roles", fontsize=12)
@@ -62,14 +62,34 @@ def display_analytics():
     plt.legend(title="Metrics")
     st.pyplot(fig)
 
+    # Pie chart for applicant distribution
+    st.subheader("Applicant Distribution by Role (Pie Chart)")
+    role_applicants = role_df[["Role", "total_applicants"]].set_index("Role")
+
+    # Handle NaN values in the total_applicants column
+    role_applicants["total_applicants"] = role_applicants["total_applicants"].fillna(0)
+
+    # If the total_applicants column is empty or all zeros, show a warning
+    if role_applicants["total_applicants"].sum() == 0:
+        st.warning("No applicants data available for pie chart.")
+    else:
+        fig, ax = plt.subplots(figsize=(8, 8))
+        role_applicants.plot.pie(y="total_applicants", ax=ax, autopct='%1.1f%%', legend=False)
+        plt.title("Total Applicants by Role", fontsize=14)
+        st.pyplot(fig)
+
     # Extract interview data
     interviews_data = analytics_data.get("interviews", [])
     if interviews_data:
         interview_df = pd.DataFrame(interviews_data)
 
-        # Display interview table
+        # Display interview table with custom styling
         st.subheader("Scheduled Interviews")
-        st.table(interview_df)
+        st.markdown("<style>table {background-color: #fff0f5;}</style>", unsafe_allow_html=True)
+        st.table(interview_df.style.set_table_styles([ 
+            {'selector': 'thead th', 'props': [('background-color', '#ff6347'), ('color', 'white')]}, 
+            {'selector': 'tbody td', 'props': [('background-color', '#f0e68c'), ('color', 'black')]}, 
+        ]))
 
         # Plot interview count by role
         st.subheader("Interviews Per Role")
@@ -81,9 +101,16 @@ def display_analytics():
         plt.ylabel("Number of Interviews", fontsize=12)
         plt.xticks(rotation=45)
         st.pyplot(fig)
+
+        # Pie chart for interview distribution by role
+        st.subheader("Interview Distribution by Role (Pie Chart)")
+        interview_counts = interview_df["role"].value_counts()
+        fig, ax = plt.subplots(figsize=(8, 8))
+        interview_counts.plot.pie(autopct='%1.1f%%', ax=ax, legend=False)
+        plt.title("Interviews by Role", fontsize=14)
+        st.pyplot(fig)
     else:
         st.warning("No interviews data available.")
-
 
 class CustomZoomTool(ZoomTool):
     def __init__(self, *, account_id: Optional[str] = None, client_id: Optional[str] = None, client_secret: Optional[str] = None, name: str = "zoom_tool"):
@@ -646,6 +673,30 @@ def schedule_interview(
             server.login(sender_email, sender_password)
             server.send_message(message)
 
+        # Step 5: Update analytics.json with interview details
+        analytics_file = "analytics.json"
+        try:
+            with open(analytics_file, "r") as file:
+                analytics_data = json.load(file)
+        except FileNotFoundError:
+            analytics_data = {"roles": {}, "interviews": []}
+        except json.JSONDecodeError:
+            analytics_data = {"roles": {}, "interviews": []}
+
+        # Add the interview details to the analytics data
+        interview_details = {
+            "email": receiver_email,
+            "role": role,
+            "time": scheduled_datetime.strftime('%Y-%m-%d %H:%M:%S'),
+            "link": meeting_link
+        }
+        analytics_data["interviews"].append(interview_details)
+
+        # Save the updated analytics data
+        with open(analytics_file, "w") as file:
+            json.dump(analytics_data, file, indent=4)
+
+        st.success("Interview scheduled successfully!")
 
     except Exception as e:
         logger.error(f"Error scheduling interview: {str(e)}")
@@ -678,11 +729,6 @@ def ask_for_time_change():
         st.write("You have opted to keep the original scheduled time.")
 
     return st.session_state.time_change_requested  # return the value to know whether to proceed with scheduling or not
-
-
-import streamlit as st
-import json
-from datetime import datetime
 
 def update_meeting_schedule():
     """
@@ -893,10 +939,12 @@ def main() -> None:
                 new_slot = f"{new_date} {new_time}"
                 if new_slot not in st.session_state.available_times:
                     st.session_state.available_times.append(new_slot)
+                    st.rerun()
                     st.success(f"Slot {new_slot} added successfully!")
                 else:
+                    st.rerun()
                     st.warning("This slot already exists.")
-                st.rerun
+                
         # Remove an existing slot
         with st.form("remove_slot_form"):
             st.write("Remove an Existing Slot")
@@ -906,8 +954,8 @@ def main() -> None:
 
                 if remove_slot and slot_to_remove:
                     st.session_state.available_times.remove(slot_to_remove)
-                    st.success(f"Slot {slot_to_remove} removed successfully!")
                     st.rerun()
+                    st.success(f"Slot {slot_to_remove} removed successfully!")
             else:
                 st.info("No available slots to remove.")
 
@@ -948,6 +996,18 @@ def main() -> None:
             for key in keys_to_clear:
                 if key in st.session_state:
                     st.session_state[key] = None if key == 'current_pdf' else ""
+            st.session_state.fragment = False
+            st.session_state.check_it = False
+            st.session_state.analysis_complete = False
+            st.session_state.is_selected = False
+            st.session_state.proceed_app = False
+            st.session_state.test_conducted = False
+            st.session_state.time_change_requested = False
+            st.session_state.go_ahead = False
+            st.session_state.session_to_proceed = False
+            st.session_state.check_again = False
+            st.session_state.no_button = False
+            st.session_state.time_and_date = False
             st.rerun()
 
         resume_file = st.file_uploader("Upload your resume (PDF)", type=["pdf"], key="resume_uploader")
@@ -994,49 +1054,88 @@ def main() -> None:
         else:
             st.session_state.candidate_email = "setodkar06@gmail.com"
 
-        # Analysis and next steps
-        if st.session_state.resume_text and st.session_state.candidate_email and not st.session_state.analysis_complete  and not st.session_state["show_analytics"]:
+        if st.session_state.resume_text and st.session_state.candidate_email and not st.session_state.analysis_complete and not st.session_state["show_analytics"]:
             if st.button("Analyze Resume"):
                 with st.spinner("Analyzing your resume..."):
-                    
-                    if True :
-                        print("DEBUG: Starting resume analysis")
-                        is_selected, feedback = analyze_resume(
-                            st.session_state.resume_text,
-                            role
-                        )
-                        print(f"DEBUG: Analysis complete - Selected: {is_selected}, Feedback: {feedback}")
+                    print("DEBUG: Starting resume analysis")
+                    is_selected, feedback = analyze_resume(
+                        st.session_state.resume_text,
+                        role
+                    )
+                    print(f"DEBUG: Analysis complete - Selected: {is_selected}, Feedback: {feedback}")
 
-                        if is_selected:
-                            st.success("Congratulations! Your skills match our requirements.")
-                            st.session_state.analysis_complete = True
-                            st.session_state.is_selected = True
-                            st.rerun()
-                        else:
-                            st.warning("Unfortunately, your skills don't match our requirements.")
-                            st.write(f"Feedback: {feedback}")
-                            
-                            # Send rejection email
-                            with st.spinner("Sending feedback email..."):
-                                try:
-                                    send_rejection_email(st.session_state.get('email_sender'),
-                                                        st.session_state.get('email_passkey'), 
-                                                        st.session_state.get('candidate_email'),
-                                                        role, 
-                                                        st.session_state.get('company_name'),
-                                                        )
-                                    st.info("We've sent you an email with detailed feedback.")
-                                except Exception as e:
-                                    logger.error(f"Error sending rejection email: {e}")
-                                    st.error("Could not send feedback email. Please try again.")
-    if st.session_state.get('analysis_complete') and st.session_state.get('is_selected', False) and not st.session_state.get('proceed_app')  and not st.session_state["show_analytics"]:
-        
+                    # Update total applicants for the role in analytics.json
+                    try:
+                        with open('analytics.json', 'r') as f:
+                            data = json.load(f)
+                    except FileNotFoundError:
+                        data = {"roles": {}, "interviews": []}
+
+                    if role not in data["roles"]:
+                        data["roles"][role] = {"total_applicants": 0, "selected_for_test": 0, "passed": 0, "failed": 0}
+
+                    data["roles"][role]["total_applicants"] += 1
+
+                    with open('analytics.json', 'w') as f:
+                        json.dump(data, f, indent=4)
+
+                    if is_selected:
+                        st.success("Congratulations! Your skills match our requirements.")
+                        st.session_state.analysis_complete = True
+                        st.session_state.is_selected = True
+                        st.rerun()
+                    else:
+                        st.warning("Unfortunately, your skills don't match our requirements.")
+                        st.write(f"Feedback: {feedback}")
+                        
+                        # Send rejection email
+                        with st.spinner("Sending feedback email..."):
+                            try:
+                                send_rejection_email(st.session_state.get('email_sender'),
+                                                    st.session_state.get('email_passkey'), 
+                                                    st.session_state.get('candidate_email'),
+                                                    role, 
+                                                    st.session_state.get('company_name'),
+                                                    )
+                                st.info("We've sent you an email with detailed feedback.")
+                            except Exception as e:
+                                logger.error(f"Error sending rejection email: {e}")
+                                st.error("Could not send feedback email. Please try again.")
+
+
+
+
+    if st.session_state.get('analysis_complete') and st.session_state.get('is_selected', False) and not st.session_state.get('proceed_app') and not st.session_state["show_analytics"]:
         test_result = conduct_test_and_evaluate(role)
         
-        if test_result:  # Candidate passed the test
+        # Read the existing analytics.json file
+        try:
+            with open('analytics.json', 'r') as f:
+                data = json.load(f)
+        except FileNotFoundError:
+            data = {"roles": {}, "interviews": []}
+
+        # Ensure role exists in data, if not initialize it
+        if role not in data["roles"]:
+            data["roles"][role] = {"total_applicants": 0, "selected_for_test": 0, "passed": 0, "failed": 0}
+
+        # Increment selected_for_test
+        data["roles"][role]["selected_for_test"] += 1
+
+        # Increment passed or failed count based on the test result
+        if test_result:
             st.session_state.go_ahead = True
-        else:  # Candidate failed the test
+            data["roles"][role]["passed"] += 1
+        else:
             st.session_state.go_ahead = False
+            data["roles"][role]["failed"] += 1
+
+        # Write the updated data back to the analytics.json file
+        with open('analytics.json', 'w') as f:
+            json.dump(data, f, indent=4)
+
+
+            
     if st.session_state.get('test_conducted') and not st.session_state.get('go_ahead') and st.session_state.get('is_selected', False)  and not st.session_state["show_analytics"]:
         st.error("You need to pass the test to proceed with the application.")
         st.info("Unfortunately we are unable to proceed.")
@@ -1138,12 +1237,41 @@ def main() -> None:
             3. Join the interview 5 minutes early
         """)
 
-
-    # Reset button
     if st.sidebar.button("Reset Application"):
+        # Clear all session state keys except 'openai_api_key'
         for key in st.session_state.keys():
             if key != 'openai_api_key':
                 del st.session_state[key]
+        
+        # Load roles dynamically from roles.json
+        try:
+            with open('roles.json', 'r') as f:
+                roles_data = json.load(f)
+        except FileNotFoundError:
+            st.error("The file 'roles.json' was not found.")
+            return  # You can remove this return if you don't want to exit the function
+        except json.JSONDecodeError:
+            st.error("Error decoding 'roles.json'. Please check the file format.")
+            return  # Similarly, remove return here if you don't want to exit the function
+        
+        # Initialize analytics.json with dynamic roles and default values
+        initial_data = {"roles": {}, "interviews": []}
+        
+        # Iterate over roles and initialize the corresponding analytics data
+        for role in roles_data:
+            # Convert role names to a format consistent with the analytics (e.g., "AI/ML Engineer" from "ai_ml_engineer")
+            formatted_role = role.replace('_', ' ').title()
+            initial_data["roles"][formatted_role] = {
+                "total_applicants": 0,
+                "selected_for_test": 0,
+                "passed": 0,
+                "failed": 0
+            }
+        
+        # Write the initialized data back to the analytics.json file
+        with open('analytics.json', 'w') as f:
+            json.dump(initial_data, f, indent=4)
+
         st.rerun()
 
 if __name__ == "__main__":
