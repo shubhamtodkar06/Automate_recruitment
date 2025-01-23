@@ -1031,6 +1031,13 @@ def main() -> None:
                 st.session_state[key] = None if key == 'current_pdf' else ""
 
             # Reset session state flags
+            test_state_key = f"{role}_test_state"
+            if test_state_key in st.session_state:
+                    st.session_state[test_state_key] = {
+                        "progress": 0,
+                        "answers": [],
+                        "completed": False
+                    }
             reset_flags = ['fragment', 'check_it', 'analysis_complete', 'is_selected', 'proceed_app', 'test_conducted', 
                         'time_change_requested', 'go_ahead', 'session_to_proceed', 'check_again', 'no_button', 'time_and_date']
             for flag in reset_flags:
@@ -1234,6 +1241,13 @@ def main() -> None:
             st.rerun()
 
     if st.session_state.get('fragment') and not st.session_state["show_analytics"]:
+        test_state_key = f"{role}_test_state"
+        if test_state_key in st.session_state:
+                st.session_state[test_state_key] = {
+                    "progress": 0,
+                    "answers": [],
+                    "completed": False
+                }
         update_analytics(role, st.session_state.get('go_ahead'))
         st.success("Interview scheduled successfully! Check your email for details.")
         st.info("Interview scheduled and email sent successfully.")
