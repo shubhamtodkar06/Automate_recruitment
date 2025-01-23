@@ -1165,7 +1165,6 @@ def main() -> None:
                                 logger.error(f"Error sending rejection email: {e}")
                                 st.error("Could not send feedback email. Please try again.")
     if st.session_state.get('test_conducted') and st.session_state.get('analysis_complete') and st.session_state.get('is_selected', False) and st.session_state.go_ahead and not st.session_state.get('session_to_proceed')  and not st.session_state["show_analytics"]:
-        update_analytics(role, st.session_state.get('go_ahead'))
         test_state_key = f"{role}_test_state"
         if test_state_key in st.session_state:
                 st.session_state[test_state_key] = {
@@ -1242,6 +1241,7 @@ def main() -> None:
             st.rerun()
 
     if st.session_state.get('fragment') and not st.session_state["show_analytics"]:
+        update_analytics(role, st.session_state.get('go_ahead'))
         st.success("Interview scheduled successfully! Check your email for details.")
         st.info("Interview scheduled and email sent successfully.")
         print("DEBUG: All processes completed successfully")  # Debug
