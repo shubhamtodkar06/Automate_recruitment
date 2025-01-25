@@ -1021,6 +1021,10 @@ def main() -> None:
     if not st.session_state["show_analytics"]:
         # Add a "New Application" button before the resume upload
         if st.button("📝 New Application") :
+            reset_flags = ['fragment', 'check_it', 'analysis_complete', 'is_selected', 'proceed_app', 'test_conducted', 
+                        'time_change_requested', 'go_ahead', 'session_to_proceed', 'check_again', 'no_button', 'time_and_date']
+            for flag in reset_flags:
+                st.session_state[flag] = False
             # Clear only the application-related states
             keys_to_clear = ['resume_text', 'analysis_complete', 'is_selected', 'candidate_email', 'current_pdf']
             for key in keys_to_clear:
@@ -1034,10 +1038,6 @@ def main() -> None:
                         "answers": [],
                         "completed": False
                     }
-            reset_flags = ['fragment', 'check_it', 'analysis_complete', 'is_selected', 'proceed_app', 'test_conducted', 
-                        'time_change_requested', 'go_ahead', 'session_to_proceed', 'check_again', 'no_button', 'time_and_date']
-            for flag in reset_flags:
-                st.session_state[flag] = False
             st.rerun()
 
         resume_file = st.file_uploader("Upload your resume (PDF)", type=["pdf"], key="resume_uploader")
@@ -1145,7 +1145,6 @@ def main() -> None:
             st.session_state.go_ahead = False
             
     if st.session_state.get('test_conducted') and not st.session_state.get('go_ahead') and st.session_state.get('is_selected', False)  and not st.session_state["show_analytics"]:
-        update_analytics(role, st.session_state.get('go_ahead'))
         st.error("You need to pass the test to proceed with the application.")
         st.info("Unfortunately we are unable to proceed.")
         with st.spinner("Sending feedback email..."):
@@ -1164,6 +1163,7 @@ def main() -> None:
                                             "completed": False
                                         }
                                 st.info("We've sent you an email with detailed feedback.")
+                                update_analytics(role, st.session_state.get('go_ahead'))
                             except Exception as e:
                                 logger.error(f"Error sending rejection email: {e}")
                                 st.error("Could not send feedback email. Please try again.")
@@ -1244,7 +1244,6 @@ def main() -> None:
                     "answers": [],
                     "completed": False
                 }
-        update_analytics(role, st.session_state.get('go_ahead'))
         st.success("Interview scheduled successfully! Check your email for details.")
         st.info("Interview scheduled and email sent successfully.")
         print("DEBUG: All processes completed successfully")  # Debug
