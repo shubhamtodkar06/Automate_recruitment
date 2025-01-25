@@ -874,11 +874,7 @@ def update_analytics(role, test_result):
     # Write the updated data back to the analytics.json file
     with open('analytics.json', 'w') as f:
         json.dump(data, f, indent=4)
-
-# Example usage:
-# update_analytics("AI/ML Engineer", True)
-
-
+        
 def main() -> None:
     st.title("AI Recruitment System")
 
