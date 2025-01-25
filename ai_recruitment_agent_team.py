@@ -1237,6 +1237,7 @@ def main() -> None:
             st.rerun()
 
     if st.session_state.get('fragment') and not st.session_state["show_analytics"]:
+        update_analytics(role, st.session_state.get('go_ahead'))
         test_state_key = f"{role}_test_state"
         if test_state_key in st.session_state:
                 st.session_state[test_state_key] = {
