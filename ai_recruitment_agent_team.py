@@ -739,7 +739,7 @@ def update_meeting_schedule():
 
     # Load predefined available times from the JSON file
     with open(
-        r"C:\Users\Admin\python_project\awesome-llm-apps\ai_agent_tutorials\ai_recruitment_agent_team\predefined_times.json",
+        r"predefined_times.json",
         "r",
     ) as file:
         predefined_data = json.load(file)
@@ -942,7 +942,7 @@ def main() -> None:
         st.subheader("Available Slots for Self-Scheduling Interviews")
 
         # Define the path to the predefined times file
-        predefined_times_path = r"C:\Users\Admin\python_project\awesome-llm-apps\ai_agent_tutorials\ai_recruitment_agent_team\predefined_times.json"
+        predefined_times_path = r"predefined_times.json"
 
         # Load available times into session state
         if "available_times" not in st.session_state:
