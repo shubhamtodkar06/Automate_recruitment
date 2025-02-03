@@ -890,7 +890,6 @@ def main() -> None:
         st.subheader("OpenAI Settings")
         api_key = st.text_input("OpenAI API Key", type="password", value=st.session_state.openai_api_key, help="Get your API key from platform.openai.com")
         if api_key: st.session_state.openai_api_key = api_key
-        else: st.session_state.openai_api_key = "sk-1234567890abcdef1234567890abcdef"
 
         st.subheader("Zoom Settings")
         zoom_account_id = st.text_input("Zoom Account ID", type="password", value=st.session_state.zoom_account_id)
